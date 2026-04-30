@@ -32,6 +32,7 @@ import { createWorkspaceManagerWindow } from '../window/WorkspaceManagerWindow.t
 import { createAIUsageReportWindow } from '../window/AIUsageReportWindow';
 import { createDatabaseBrowserWindow } from '../window/DatabaseBrowserWindow';
 import { createDeveloperDashboardWindow } from '../window/DeveloperDashboardWindow';
+import { runDiffErgonomicsHarness } from '../file/DiffErgonomicsFixture';
 import { loadFileIntoWindow } from '../file/FileOperations';
 import { getRecentItems, clearRecentItems, addToRecentItems, getTheme, setTheme, store, getWorkspaceState, getWorkspaceWindowState, isExtensionDevToolsEnabled } from '../utils/store';
 import { updateWindowTitleBars, updateNativeTheme } from '../theme/ThemeManager';
@@ -1035,6 +1036,12 @@ export async function createApplicationMenu() {
                     label: 'Developer Dashboard',
                     click: () => {
                         createDeveloperDashboardWindow();
+                    }
+                },
+                {
+                    label: 'Diff Ergonomics Test Harness',
+                    click: async () => {
+                        await runDiffErgonomicsHarness(getFocusedWindow());
                     }
                 },
                 {
