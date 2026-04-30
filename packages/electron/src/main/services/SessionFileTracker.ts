@@ -238,6 +238,30 @@ export class SessionFileTracker {
         return;
       }
 
+      // Codex ACP apply_patch carries every affected file in `args.changes`,
+      // an object keyed by absolute path (e.g. `{ "/abs/path.tsx": { type, unified_diff } }`).
+      // mergeLocationPath only injects the first location into args.path, so
+      // single-file extraction below would miss the rest of a multi-file patch.
+      if (toolName === 'ApplyPatch' && args?.changes && typeof args.changes === 'object' && !Array.isArray(args.changes)) {
+        const changeEntries = Object.entries(args.changes as Record<string, unknown>);
+        if (changeEntries.length > 0) {
+          let bypassCount = 0;
+          for (const [changeFilePath, entry] of changeEntries) {
+            if (!changeFilePath || typeof changeFilePath !== 'string' || !changeFilePath.trim()) continue;
+            if (!entry || typeof entry !== 'object') continue;
+            const changePath = changeFilePath.startsWith('/')
+              ? changeFilePath
+              : path.resolve(workspaceId, changeFilePath);
+            if (bypassCount < 10) {
+              addGitignoreBypass(workspaceId, changePath);
+              bypassCount++;
+            }
+            await this.trackSingleFile(sessionId, workspaceId, changePath, linkType, toolName, args, result, toolUseId, window);
+          }
+          return;
+        }
+      }
+
       // Bash/shell commands are intentionally not parsed for file operations.
       // Watcher-based attribution is responsible for detecting and attributing
       // file edits caused by shell commands.
