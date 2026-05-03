@@ -383,12 +383,33 @@ export class DocumentModel {
    * Clear diff state without triggering a save.
    * Used when the editor resolves diffs through its own save path
    * (e.g. Lexical's CLEAR_DIFF_TAG_COMMAND flow).
+   *
+   * `excludeEditorId` lets the resolving editor opt itself out of the
+   * diff-resolved fan-out. Sibling attachments still receive the callback so
+   * they can dismiss their own diff UI (clear pendingAIEditTagRef, repaint
+   * editor content) -- without this, a file open in both Files mode and Agent
+   * mode stays stuck in diff mode on whichever side did not click Approve.
+   * `accepted` defaults to `true` since Lexical's CLEAR_DIFF_TAG_COMMAND only
+   * fires after the resolving editor has approved (or has manually deleted
+   * all diff content, which is functionally the same outcome for siblings).
    */
-  clearDiffState(): void {
+  clearDiffState(excludeEditorId?: string, accepted: boolean = true): void {
     if (this.diffState || this.currentSession) {
       this.diffState = null;
       this.currentSession = null;
       this.emit('diff-state-changed');
+
+      // Fan out to siblings so they exit diff mode too.
+      for (const [attId, att] of this.attachments) {
+        if (attId === excludeEditorId) continue;
+        for (const cb of att.diffResolvedCallbacks) {
+          try {
+            cb(accepted);
+          } catch (err) {
+            console.error('[DocumentModel] Error in diff resolved callback:', err);
+          }
+        }
+      }
     }
   }
 

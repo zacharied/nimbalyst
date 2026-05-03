@@ -27,7 +27,8 @@ import {
   CLEAR_DIFF_TAG_COMMAND,
   INCREMENTAL_APPROVAL_COMMAND,
   $hasDiffNodes,
-  $approveDiffs
+  $approveDiffs,
+  $rejectDiffs
 } from '@nimbalyst/runtime';
 import { $getRoot, $getSelection, $isRangeSelection, SKIP_SCROLL_INTO_VIEW_TAG, COMMAND_PRIORITY_LOW } from 'lexical';
 import { DocumentHeaderContainer } from '@nimbalyst/runtime/plugins/TrackerPlugin/documentHeader';
@@ -835,7 +836,10 @@ export const TabEditor: React.FC<TabEditorProps> = ({
               const { tagId, filePath: tagFilePath } = pendingAIEditTagRef.current;
               await window.electronAPI.invoke('history:update-tag-status', tagFilePath, tagId, 'reviewed');
               setPendingAIEditTag(null);
-              documentModel?.clearDiffState();
+              // Exclude self: clearDiffState fans out to siblings via
+              // onDiffResolved; recursing back into our own subscription
+              // would re-clear the (already-cleared) tag state.
+              documentModel?.clearDiffState(documentModelHandleRef.current?.id, true);
             } else if (window.electronAPI?.history) {
               // Also check database for pending tags (may exist from simulateApplyDiff path
               // where the tag was created in DB but pendingAIEditTagRef was never set)
@@ -875,6 +879,15 @@ export const TabEditor: React.FC<TabEditorProps> = ({
     }
   }, [filePath, fileName, onSaveComplete]);
 
+  // Latest saveWithHistory accessible from the stable EditorHost adapter (which
+  // is memoized on filePath/fileName and would otherwise capture a stale closure).
+  // The host adapter routes built-in editor saves through this ref so they
+  // participate in Layer D conflict detection like saveWithHistory does directly.
+  const saveWithHistoryRef = useRef(saveWithHistory);
+  useEffect(() => {
+    saveWithHistoryRef.current = saveWithHistory;
+  }, [saveWithHistory]);
+
   // Manual save function
   const handleManualSave = useCallback(async () => {
     if (!getContentFnRef.current) {
@@ -892,8 +905,9 @@ export const TabEditor: React.FC<TabEditorProps> = ({
       editorRef.current.update(() => {
         $approveDiffs();
       });
-      // Clear the pending tag since we've accepted everything
-      documentModel?.clearDiffState();
+      // Clear the pending tag since we've accepted everything. Exclude self
+      // from the fan-out so onDiffResolved doesn't recurse into our own editor.
+      documentModel?.clearDiffState(documentModelHandleRef.current?.id, true);
       const { tagId, filePath: tagFilePath } = pendingAIEditTagRef.current;
       window.electronAPI.invoke('history:update-tag-status', tagFilePath, tagId, 'reviewed');
       setPendingAIEditTag(null);
@@ -997,7 +1011,9 @@ export const TabEditor: React.FC<TabEditorProps> = ({
           const { tagId, filePath: tagFilePath } = pendingAIEditTagRef.current;
           window.electronAPI.invoke('history:update-tag-status', tagFilePath, tagId, 'reviewed');
           setPendingAIEditTag(null);
-          documentModel?.clearDiffState();
+          // Exclude self from the diffResolved fan-out -- siblings still
+          // need to exit diff mode, but we already did our local cleanup.
+          documentModel?.clearDiffState(documentModelHandleRef.current?.id, true);
         }
 
         const currentContent = getContentFnRef.current();
@@ -1226,6 +1242,61 @@ export const TabEditor: React.FC<TabEditorProps> = ({
         }
 
         void applyDiffState(diffState);
+      }),
+    );
+
+    // --- Sibling diff resolution: another attachment accepted/rejected the diff ---
+    // Without this, a file open in both Files mode and Agent mode would stay stuck
+    // in diff mode on whichever side did NOT click Approve. We dismiss the local
+    // diff UI here; the upcoming notifyFileChanged from the resolving editor
+    // delivers the post-resolution content.
+    cleanups.push(
+      handle.onDiffResolved((accepted) => {
+        if (!pendingAIEditTagRef.current) return;
+        logger.ui.info('[TabEditor] Sibling editor resolved diff -- exiting diff mode', { filePath, accepted });
+
+        // Drop our local pending-tag tracking. onFileChanged is gated on
+        // pendingAIEditTagRef being null, so without this clear the resolved
+        // content delivered next would be dropped.
+        setPendingAIEditTag(null);
+
+        // Hide the diff approval bar / change-count UI (Monaco path).
+        setShowMonacoDiffBar(false);
+        setDiffSessionInfo(null);
+        setMonacoDiffChangeCount(0);
+
+        // Visually clean up any leftover diff nodes/decorations. We wrap in
+        // isApplyingDiffRef so the resulting Lexical updates don't mark the
+        // editor dirty.
+        if (editorRef.current) {
+          isApplyingDiffRef.current = true;
+          try {
+            if (isMarkdown && typeof editorRef.current.update === 'function') {
+              editorRef.current.update(() => {
+                if ($hasDiffNodes(editorRef.current!)) {
+                  if (accepted) {
+                    $approveDiffs();
+                  } else {
+                    $rejectDiffs();
+                  }
+                }
+              });
+            } else if (typeof editorRef.current.exitDiffMode === 'function') {
+              // Monaco diff editor
+              try {
+                editorRef.current.exitDiffMode();
+              } catch (err) {
+                logger.ui.warn('[TabEditor] exitDiffMode failed for sibling diff resolution:', err);
+              }
+            }
+          } finally {
+            // Defer clearing so the Lexical update listener that runs after
+            // the editor.update() above has the flag set when it fires.
+            setTimeout(() => {
+              isApplyingDiffRef.current = false;
+            }, 0);
+          }
+        }
       }),
     );
 
@@ -1479,8 +1550,10 @@ export const TabEditor: React.FC<TabEditorProps> = ({
         // Clear the pending tag reference immediately so file watcher won't re-enter diff mode
         setPendingAIEditTag(null);
 
-        // Clear DocumentModel's diff state so it doesn't re-enter diff mode on the save echo
-        documentModel?.clearDiffState();
+        // Clear DocumentModel's diff state AND fan out to sibling attachments
+        // so they dismiss their own diff UI. Without excluding our own editor
+        // id we'd recurse via the onDiffResolved callback we just registered.
+        documentModel?.clearDiffState(documentModelHandleRef.current?.id, true);
 
         // Now save current editor state to disk
         if (editorRef.current) {
@@ -1495,6 +1568,12 @@ export const TabEditor: React.FC<TabEditorProps> = ({
 
             // Update DocumentModel's echo-suppression baseline
             documentModel?.setLastPersistedContent(currentContent);
+
+            // Push the resolved content to clean siblings so their editor
+            // reflects the post-approval state (the model skips dirty
+            // siblings, but they should be clean here since diff application
+            // is wrapped in isApplyingDiffRef which suppresses dirty).
+            documentModelHandleRef.current?.notifySiblingsSaved(currentContent);
 
             // Create history snapshot
             await window.electronAPI.invoke('history:create-snapshot', filePath, currentContent, 'manual', 'Incremental diff acceptance');
@@ -1712,6 +1791,13 @@ export const TabEditor: React.FC<TabEditorProps> = ({
         editorRef.current.setContent(newContent, { force: true });
       }
 
+      // Tell DocumentModel the diff was resolved and propagate the new content
+      // to sibling attachments (e.g. Files-mode tab when Agent-mode resolved)
+      // so they exit diff mode too. Excludes our own editor id so we don't
+      // recurse via onDiffResolved.
+      documentModel?.clearDiffState(documentModelHandleRef.current?.id, true);
+      documentModelHandleRef.current?.notifySiblingsSaved(newContent);
+
       logger.ui.info('[TabEditor] Monaco diff accepted successfully');
     } catch (error) {
       logger.ui.error('[TabEditor] Error accepting Monaco diff:', error);
@@ -1774,6 +1860,11 @@ export const TabEditor: React.FC<TabEditorProps> = ({
         editorRef.current.setContent(oldContent, { force: true });
       }
 
+      // Tell DocumentModel the diff was resolved (rejected) and propagate the
+      // restored content so sibling attachments exit diff mode too.
+      documentModel?.clearDiffState(documentModelHandleRef.current?.id, false);
+      documentModelHandleRef.current?.notifySiblingsSaved(oldContent);
+
       logger.ui.info('[TabEditor] Monaco diff rejected successfully');
     } catch (error) {
       logger.ui.error('[TabEditor] Error rejecting Monaco diff:', error);
@@ -1828,6 +1919,11 @@ export const TabEditor: React.FC<TabEditorProps> = ({
       // The editor will reload content from disk via host.loadContent()
       diffClearedCallbackRef.current?.();
 
+      // Fan out to sibling attachments so they exit diff mode too. Disk
+      // already holds the AI-written (now-accepted) content; siblings will
+      // pick it up via host.loadContent on their own diff-cleared callback.
+      documentModel?.clearDiffState(documentModelHandleRef.current?.id, true);
+
       logger.ui.info('[TabEditor] Custom editor diff accepted successfully');
     } catch (error) {
       logger.ui.error('[TabEditor] Error accepting custom editor diff:', error);
@@ -1880,6 +1976,10 @@ export const TabEditor: React.FC<TabEditorProps> = ({
       // Notify the custom editor that diff mode has ended
       // The editor will reload content from disk via host.loadContent()
       diffClearedCallbackRef.current?.();
+
+      // Fan out to sibling attachments so they exit diff mode too.
+      documentModel?.clearDiffState(documentModelHandleRef.current?.id, false);
+      documentModelHandleRef.current?.notifySiblingsSaved(baseline.content);
 
       logger.ui.info('[TabEditor] Custom editor diff rejected successfully');
     } catch (error) {
@@ -1996,41 +2096,42 @@ export const TabEditor: React.FC<TabEditorProps> = ({
       },
 
       // Save content to disk
-      // Delegates to DocumentModel handle when available, which coordinates saves
-      // across all editors, updates lastPersistedContent, and notifies other editors.
+      // Routes string saves through saveWithHistory so the built-in autosave
+      // path participates in Layer D conflict detection (lastKnownContent
+      // baseline) the same way TabEditor's manual/diff-driven saves do.
+      // saveWithHistory also handles dirty-flag clearing, sibling notification,
+      // history snapshotting, and the autosave-conflict banner.
       saveContent: async (content: string | ArrayBuffer): Promise<void> => {
-        if (documentModelHandleRef.current) {
-          // Delegate to DocumentModel for coordinated save
-          await documentModelHandleRef.current.saveContent(content);
-          // Update local tracking refs
-          if (typeof content === 'string') {
-            lastSavedContentRef.current = content;
+        if (typeof content === 'string') {
+          // Diff-mode guard: while AI diff nodes are still in the editor, the
+          // disk holds the AI-written content and lastSavedContentRef holds the
+          // pre-AI baseline -- Layer D would flag every autosave as a conflict
+          // and interfere with the APPROVE_DIFF_COMMAND -> CLEAR_DIFF_TAG_COMMAND
+          // chain. Mirror the same guard TabEditor's own onSaveRequested handler
+          // applies (line ~990) so built-in editors honor diff mode too.
+          if (pendingAIEditTagRef.current && editorRef.current && typeof editorRef.current.getEditorState === 'function') {
+            const hasDiffs = editorRef.current.getEditorState().read(() => {
+              return $hasDiffNodes(editorRef.current!);
+            });
+            if (hasDiffs) return;
           }
-          lastSaveTimeRef.current = Date.now();
-          isDirtyRef.current = false;
-          onDirtyChange?.(false);
-          // Create history snapshot
-          if (window.electronAPI.history && typeof content === 'string') {
-            await window.electronAPI.history.createSnapshot(filePath, content, 'auto-save', 'Auto-save');
-          }
+          await saveWithHistoryRef.current(content, 'auto', false);
           return;
         }
 
-        // Fallback: direct IPC save (should not happen with DocumentModel wired)
-        if (typeof content === 'string') {
-          lastSavedContentRef.current = content;
+        // Binary path: DocumentModel saveContent does not currently support
+        // ArrayBuffer with a conflict baseline. Fall back to the coordinated
+        // DocumentModel save (still bypasses Layer D for binary, but no
+        // built-in editor uses this path today).
+        if (documentModelHandleRef.current) {
+          await documentModelHandleRef.current.saveContent(content);
+          lastSaveTimeRef.current = Date.now();
+          isDirtyRef.current = false;
+          onDirtyChange?.(false);
+          return;
         }
-        lastSaveTimeRef.current = Date.now();
-        if (typeof content === 'string') {
-          await window.electronAPI.saveFile(content, filePath);
-        } else {
-          throw new Error('Binary content saving not yet implemented');
-        }
-        if (window.electronAPI.history && typeof content === 'string') {
-          await window.electronAPI.history.createSnapshot(filePath, content, 'auto-save', 'Auto-save');
-        }
-        isDirtyRef.current = false;
-        onDirtyChange?.(false);
+
+        throw new Error('Binary content saving requires a DocumentModel handle');
       },
 
       // Subscribe to save requests from host (autosave timer, manual save)
@@ -2123,18 +2224,34 @@ export const TabEditor: React.FC<TabEditorProps> = ({
       toggleSourceMode: async () => {
         const currentlyInSourceMode = sourceModeRef.current;
 
+        // Pre-toggle save with Layer D conflict detection. If the file changed
+        // on disk since we loaded/saved it, the dirty buffer about to be flushed
+        // would silently overwrite the external write -- and the disk-reload
+        // step that follows would then clobber the user's in-memory edits with
+        // the foreign content. Surface the conflict and abort the toggle so the
+        // user can resolve via the autosave-conflict banner.
+        const flushDirtyBuffer = async (content: string): Promise<boolean> => {
+          const expected = lastSavedContentRef.current;
+          const result = await window.electronAPI.saveFile(content, filePath, expected);
+          if (result?.conflict) {
+            setAutosaveConflictDiskContent(typeof result.diskContent === 'string' ? result.diskContent : '');
+            return false;
+          }
+          lastSavedContentRef.current = content;
+          contentRef.current = content;
+          isDirtyRef.current = false;
+          onDirtyChange?.(false);
+          return true;
+        };
+
         if (currentlyInSourceMode) {
           // Switching FROM source mode (Monaco) TO rich editor (Lexical or custom)
           // Save Monaco's content to disk first so rich editor loads fresh data
           if (getContentFnRef.current && isDirtyRef.current) {
             const monacoContent = getContentFnRef.current();
             logger.ui.info(`[TabEditor] Saving source mode content before switching to rich editor: ${fileName}`);
-            await window.electronAPI.saveFile(monacoContent, filePath);
-            // Update our tracking
-            lastSavedContentRef.current = monacoContent;
-            contentRef.current = monacoContent;
-            isDirtyRef.current = false;
-            onDirtyChange?.(false);
+            const saved = await flushDirtyBuffer(monacoContent);
+            if (!saved) return;
           }
           // Reload content from disk so rich editor has fresh data
           try {
@@ -2150,19 +2267,23 @@ export const TabEditor: React.FC<TabEditorProps> = ({
           // Switching TO source mode (Monaco) FROM rich editor (Lexical or custom)
           // First, save rich editor's content if dirty
           if (isDirtyRef.current) {
-            if (editorHostSaveRequestCallbackRef.current) {
-              // Custom editor - use EditorHost callback
-              logger.ui.info(`[TabEditor] Saving custom editor content before switching to source mode: ${fileName}`);
+            if (getContentFnRef.current) {
+              // Lexical and custom editors that expose getContent: do an
+              // explicit Layer D-aware save so we can detect external-write
+              // conflicts and abort the toggle. Note that MarkdownEditor sets
+              // editorHostSaveRequestCallbackRef too, so we cannot use that ref
+              // to discriminate "custom" from "lexical" -- and firing the host
+              // callback fire-and-forget would lose conflict signal anyway.
+              logger.ui.info(`[TabEditor] Saving rich editor content before switching to source mode: ${fileName}`);
+              const richContent = getContentFnRef.current();
+              const saved = await flushDirtyBuffer(richContent);
+              if (!saved) return;
+            } else if (editorHostSaveRequestCallbackRef.current) {
+              // Custom editor with no getContent exposure (rare): fall back to
+              // the host save callback. Cannot detect conflicts here -- the
+              // extension is responsible for its own save semantics.
+              logger.ui.info(`[TabEditor] Saving custom editor content (no getContent) before switching to source mode: ${fileName}`);
               editorHostSaveRequestCallbackRef.current();
-            } else if (getContentFnRef.current) {
-              // Lexical - use getContent function
-              logger.ui.info(`[TabEditor] Saving Lexical content before switching to source mode: ${fileName}`);
-              const lexicalContent = getContentFnRef.current();
-              await window.electronAPI.saveFile(lexicalContent, filePath);
-              lastSavedContentRef.current = lexicalContent;
-              contentRef.current = lexicalContent;
-              isDirtyRef.current = false;
-              onDirtyChange?.(false);
             }
             // Give the save a moment to complete
             await new Promise(resolve => setTimeout(resolve, 100));

@@ -385,6 +385,53 @@ describe('DocumentModel', () => {
       expect(diffModel.getDiffState()).toBeNull();
     });
 
+    it('clearDiffState fans out diffResolved to sibling attachments', async () => {
+      // Reproduces the dual-attachment bug: when one tab dispatches the
+      // Lexical CLEAR_DIFF_TAG_COMMAND flow (which calls clearDiffState
+      // directly rather than resolveDiff), the *other* attachment must still
+      // be told to exit diff mode. Without this fan-out, a Files-mode tab
+      // stays stuck in diff mode after Agent-mode hits Approve All.
+      const h1 = diffModel.attach();
+      const h2 = diffModel.attach();
+      const h3 = diffModel.attach();
+      const diffCb1 = vi.fn();
+      const resolvedCb1 = vi.fn();
+      const resolvedCb2 = vi.fn();
+      const resolvedCb3 = vi.fn();
+      h1.onDiffRequested(diffCb1);
+      h1.onDiffResolved(resolvedCb1);
+      h2.onDiffResolved(resolvedCb2);
+      h3.onDiffResolved(resolvedCb3);
+
+      diffStore.triggerExternalChange('ai edit');
+      await vi.waitFor(() => expect(diffCb1).toHaveBeenCalled());
+
+      // Editor 1 cleans up via clearDiffState (mirrors the Lexical
+      // CLEAR_DIFF_TAG_COMMAND path) and excludes itself from the fan-out.
+      diffModel.clearDiffState(h1.id, true);
+
+      expect(resolvedCb1).not.toHaveBeenCalled(); // self excluded
+      expect(resolvedCb2).toHaveBeenCalledWith(true);
+      expect(resolvedCb3).toHaveBeenCalledWith(true);
+      expect(diffModel.getDiffState()).toBeNull();
+    });
+
+    it('clearDiffState propagates rejection to siblings', async () => {
+      const h1 = diffModel.attach();
+      const h2 = diffModel.attach();
+      const diffCb1 = vi.fn();
+      const resolvedCb2 = vi.fn();
+      h1.onDiffRequested(diffCb1);
+      h2.onDiffResolved(resolvedCb2);
+
+      diffStore.triggerExternalChange('ai edit');
+      await vi.waitFor(() => expect(diffCb1).toHaveBeenCalled());
+
+      diffModel.clearDiffState(h1.id, false);
+
+      expect(resolvedCb2).toHaveBeenCalledWith(false);
+    });
+
     it('does not fire onDiffRequested for a duplicate payload after markDiffApplied', async () => {
       const handle = diffModel.attach();
       const diffCb = vi.fn();
