@@ -43,6 +43,7 @@ import {
   handleTrackerCreate,
   handleTrackerUpdate,
   handleTrackerLinkSession,
+  handleTrackerUnlinkSession,
   handleTrackerLinkFile,
   handleTrackerAddComment,
   trackerToolSchemas,
@@ -401,6 +402,9 @@ function createSharedMcpServer(
 
         case "tracker_link_session":
           return handleTrackerLinkSession(args, sessionId, workspacePath);
+
+        case "tracker_unlink_session":
+          return handleTrackerUnlinkSession(args, sessionId, workspacePath);
 
         case "tracker_link_file":
           return handleTrackerLinkFile(args, sessionId, workspacePath);

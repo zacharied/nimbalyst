@@ -117,6 +117,71 @@ export async function createBidirectionalLink(
   return changed;
 }
 
+/**
+ * Remove a bidirectional link between a tracker item and an AI session.
+ * - Removes sessionId from tracker item's data.linkedSessions[]
+ * - Removes trackerId from session's metadata.linkedTrackerItemIds[]
+ * Returns true if any link was actually removed.
+ */
+export async function removeBidirectionalLink(
+  trackerId: string,
+  sessionId: string,
+): Promise<boolean> {
+  const { getDatabase } = await import("../../database/initialize");
+  const db = getDatabase();
+  let changed = false;
+
+  // 1. Remove session from tracker item's linkedSessions
+  const trackerResult = await db.query<any>(
+    `SELECT data FROM tracker_items WHERE id = $1`,
+    [trackerId]
+  );
+  if (trackerResult.rows.length > 0) {
+    const row = trackerResult.rows[0];
+    const data = typeof row.data === "string" ? JSON.parse(row.data) : row.data || {};
+    const linkedSessions: string[] = Array.isArray(data.linkedSessions) ? data.linkedSessions : [];
+    const nextLinkedSessions = linkedSessions.filter((linkedSessionId) => linkedSessionId !== sessionId);
+    if (nextLinkedSessions.length !== linkedSessions.length) {
+      if (nextLinkedSessions.length > 0) {
+        data.linkedSessions = nextLinkedSessions;
+      } else {
+        delete data.linkedSessions;
+      }
+      await db.query(
+        `UPDATE tracker_items SET data = $1, updated = NOW() WHERE id = $2`,
+        [JSON.stringify(data), trackerId]
+      );
+      changed = true;
+    }
+  }
+
+  // 2. Remove tracker item ID from session's metadata.linkedTrackerItemIds
+  const sessionResult = await db.query<any>(
+    `SELECT metadata FROM ai_sessions WHERE id = $1`,
+    [sessionId]
+  );
+  if (sessionResult.rows.length > 0) {
+    const metadata = sessionResult.rows[0].metadata ?? {};
+    const linkedTrackerItemIds: string[] = Array.isArray(metadata.linkedTrackerItemIds)
+      ? metadata.linkedTrackerItemIds
+      : [];
+    const nextLinkedTrackerItemIds = linkedTrackerItemIds.filter((linkedTrackerId) => linkedTrackerId !== trackerId);
+    if (nextLinkedTrackerItemIds.length !== linkedTrackerItemIds.length) {
+      const nextMetadata =
+        nextLinkedTrackerItemIds.length > 0 ? { linkedTrackerItemIds: nextLinkedTrackerItemIds } : {};
+      await db.query(
+        `UPDATE ai_sessions
+         SET metadata = (COALESCE(metadata, '{}'::jsonb) - 'linkedTrackerItemIds') || $1::jsonb
+         WHERE id = $2`,
+        [JSON.stringify(nextMetadata), sessionId]
+      );
+      changed = true;
+    }
+  }
+
+  return changed;
+}
+
 /** Convert a raw DB row to a TrackerItem for the renderer */
 function rowToTrackerItem(row: any): any {
   const data = typeof row.data === 'string' ? JSON.parse(row.data) : row.data || {};
@@ -504,6 +569,25 @@ export const trackerToolSchemas = [
         sessionId: {
           type: "string",
           description: "Optional. The AI session ID to link to the tracker item. Defaults to the current session if omitted.",
+        },
+      },
+      required: ["trackerId"],
+    },
+  },
+  {
+    name: "tracker_unlink_session",
+    description:
+      "Unlink an AI session from a tracker item. This removes the bidirectional reference from both the session and the work item.\n\nBy default the unlink targets the current AI session. Pass sessionId to unlink a different session.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        trackerId: {
+          type: "string",
+          description: "The tracker item ID or issue key to unlink",
+        },
+        sessionId: {
+          type: "string",
+          description: "Optional. The AI session ID to unlink from the tracker item. Defaults to the current session if omitted.",
         },
       },
       required: ["trackerId"],
@@ -1467,6 +1551,112 @@ export async function handleTrackerLinkSession(
         {
           type: "text",
           text: `Error linking session: ${error instanceof Error ? error.message : String(error)}`,
+        },
+      ],
+      isError: true,
+    };
+  }
+}
+
+export async function handleTrackerUnlinkSession(
+  args: any,
+  sessionId: string | undefined,
+  workspacePath: string | undefined
+): Promise<McpToolResult> {
+  try {
+    const targetSessionId =
+      typeof args.sessionId === "string" && args.sessionId.length > 0
+        ? args.sessionId
+        : sessionId;
+
+    if (!targetSessionId) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: "Error: No session ID available. Pass sessionId or invoke this tool during an active AI session.",
+          },
+        ],
+        isError: true,
+      };
+    }
+
+    const { getDatabase } = await import("../../database/initialize");
+    const db = getDatabase();
+
+    const existing = await resolveTrackerRowByReference(db, args.trackerId, workspacePath);
+    if (!existing) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Tracker item not found: ${args.trackerId}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+
+    const removed = await removeBidirectionalLink(existing.id, targetSessionId);
+
+    const trackerResult = await db.query<any>(
+      `SELECT data FROM tracker_items WHERE id = $1`,
+      [existing.id]
+    );
+    const trackerData = typeof trackerResult.rows[0]?.data === "string"
+      ? JSON.parse(trackerResult.rows[0].data)
+      : trackerResult.rows[0]?.data || {};
+    const linkedSessions: string[] = trackerData.linkedSessions || [];
+
+    await notifyTrackerItemUpdated(workspacePath, existing.id);
+    const sessionResult = await db.query<any>(
+      `SELECT metadata FROM ai_sessions WHERE id = $1`,
+      [targetSessionId]
+    );
+    if (sessionResult.rows.length > 0) {
+      const linkedIds = sessionResult.rows[0]?.metadata?.linkedTrackerItemIds || [];
+      await notifySessionLinkedTrackerChanged(targetSessionId, linkedIds);
+    }
+
+    const structured = {
+      action: "unlinked" as const,
+      trackerId: existing.id,
+      issueNumber: existing.issue_number ?? undefined,
+      issueKey: existing.issue_key ?? undefined,
+      type: existing.type || "",
+      title: trackerData.title || "",
+      linkedCount: linkedSessions.length,
+      sessionId: targetSessionId,
+      removed,
+    };
+
+    const displayRef = getTrackerDisplayRef({ id: existing.id, issueKey: existing.issue_key ?? undefined });
+    const summary = removed
+      ? `Unlinked session ${targetSessionId} from tracker item ${displayRef}. Total linked sessions: ${linkedSessions.length}`
+      : `Session ${targetSessionId} was not linked to tracker item ${displayRef}. Total linked sessions: ${linkedSessions.length}`;
+
+    return {
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify({
+            structured,
+            summary,
+          }),
+        },
+      ],
+      isError: false,
+    };
+  } catch (error) {
+    console.error(
+      "[MCP Server] tracker_unlink_session failed:",
+      error
+    );
+    return {
+      content: [
+        {
+          type: "text",
+          text: `Error unlinking session: ${error instanceof Error ? error.message : String(error)}`,
         },
       ],
       isError: true,
