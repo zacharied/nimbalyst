@@ -187,6 +187,20 @@ interface AppStoreSchema {
   lastKnownVersion?: string;
   // Extension marketplace install tracking
   marketplaceInstalls?: Record<string, MarketplaceInstallRecord>;
+  // Multi-project rail: opt-in flag to host multiple projects in a single
+  // window. When false (default), each project still gets its own window.
+  multiProjectMode?: boolean;
+  // Workspace paths currently warm in the multi-project rail, in display
+  // order. Empty when multiProjectMode is off or before the user adds any.
+  openProjects?: string[];
+  // Path of the project currently visible in the rail. Restored on launch
+  // so the user lands on the same project.
+  activeProjectPath?: string | null;
+  // When true, the rail rehydrates with the projects that were warm at
+  // last app close. When false (default), the rail starts empty and is
+  // seeded only with the project the user picks from the launch screen
+  // — additional projects must be added explicitly.
+  restorePreviousProjectsOnLaunch?: boolean;
 }
 
 /**
@@ -2145,6 +2159,44 @@ export function updateMarketplaceInstall(extensionId: string, updates: Partial<M
     installs[extensionId] = { ...installs[extensionId], ...updates };
     getAppStore().set('marketplaceInstalls', installs);
   }
+}
+
+// Multi-Project Rail Settings
+// `multiProjectMode` is the opt-in toggle that lets users open several
+// projects in a single window via the project rail. The `openProjects` list
+// and `activeProjectPath` are restored on launch so the rail rehydrates.
+
+export function getMultiProjectMode(): boolean {
+  return getAppStore().get('multiProjectMode', false);
+}
+
+export function setMultiProjectMode(enabled: boolean): void {
+  getAppStore().set('multiProjectMode', enabled);
+}
+
+export function getOpenProjectPaths(): string[] {
+  const stored = getAppStore().get('openProjects', []);
+  return Array.isArray(stored) ? stored : [];
+}
+
+export function setOpenProjectPaths(paths: string[]): void {
+  getAppStore().set('openProjects', paths);
+}
+
+export function getActiveProjectPath(): string | null {
+  return getAppStore().get('activeProjectPath', null);
+}
+
+export function setActiveProjectPath(path: string | null): void {
+  getAppStore().set('activeProjectPath', path);
+}
+
+export function getRestorePreviousProjectsOnLaunch(): boolean {
+  return getAppStore().get('restorePreviousProjectsOnLaunch', false);
+}
+
+export function setRestorePreviousProjectsOnLaunch(enabled: boolean): void {
+  getAppStore().set('restorePreviousProjectsOnLaunch', enabled);
 }
 
 export function runMigrations(currentVersion: string): void {

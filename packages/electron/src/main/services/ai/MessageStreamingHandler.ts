@@ -206,7 +206,10 @@ export class MessageStreamingHandler {
       // [SessionManager] Rejecting session ... rejection logs because the
       // receiving window's renderer would call aiLoadSession with its own
       // workspace path. The session's workspace is immutable, so we cache the
-      // lookup. See docs/IPC_GUIDE.md "Workspace-Scoped IPC".
+      // lookup. findWindowByWorkspace is rail-aware, so it correctly resolves
+      // a window that hosts the session's project as a rail-warm
+      // (additionalWorkspacePaths) entry, not just as the active one.
+      // See docs/IPC_GUIDE.md "Workspace-Scoped IPC".
       void getWorkspacePathForSession(batch.sessionId).then((workspacePath) => {
         if (!workspacePath) {
           return;
@@ -601,11 +604,17 @@ export class MessageStreamingHandler {
     const toolHandler = this.svc.createToolHandler(event.sender, documentContext, session.id, effectiveWorkspacePath);
     provider.registerToolHandler(toolHandler);
 
-    // Listen for message:logged events and forward to renderer to trigger UI updates
-    // Skip hidden messages - they shouldn't trigger UI refreshes
+    // Listen for message:logged events and forward to renderer to trigger UI updates.
+    // Skip hidden messages - they shouldn't trigger UI refreshes.
+    //
+    // Multi-project rail: include the session's workspacePath in the payload
+    // so the renderer can route the reload to the correct workspace even
+    // when the session is in a project that is not currently visible. The
+    // renderer's session registry holds only the visible project's
+    // sessions, so it can't always resolve the path on its own.
     const onMessageLogged = (data: { sessionId: string; direction: string; hidden?: boolean }) => {
       if (data.hidden) return;
-      safeSend(event, 'ai:message-logged', data);
+      safeSend(event, 'ai:message-logged', { ...data, workspacePath: effectiveWorkspacePath });
     };
     // Remove all previous listeners to avoid duplicates
     provider.removeAllListeners('message:logged');
@@ -663,7 +672,7 @@ export class MessageStreamingHandler {
     // Listen for ExitPlanMode confirmation requests and forward to renderer
     const onExitPlanModeConfirm = async (data: { requestId: string; sessionId: string; planSummary: string; timestamp: number }) => {
       logger.main.info('[AIService] ExitPlanMode confirmation requested:', data.requestId);
-      safeSend(event, 'ai:exitPlanModeConfirm', data);
+      safeSend(event, 'ai:exitPlanModeConfirm', { ...data, workspacePath: effectiveWorkspacePath });
       syncPendingPrompt(data.sessionId, true);
       TrayManager.getInstance().onPromptCreated(data.sessionId);
 
@@ -687,10 +696,39 @@ export class MessageStreamingHandler {
     provider.removeAllListeners('exitPlanMode:confirm');
     provider.on('exitPlanMode:confirm', onExitPlanModeConfirm);
 
+    // Listen for ExitPlanMode resolutions (approve/deny) and flip session
+    // status back to 'running' so SessionStateManager emits session:streaming
+    // for every subscribed window. Required for the "Continued Planning"
+    // denial path in the multi-project rail: without this, state stays at
+    // waiting_for_input and the AGENT panel's "Thinking…" indicator does
+    // not re-appear when the SDK resumes streaming. Mirrors the
+    // askUserQuestion:answered and toolPermission:resolved patterns above.
+    const onExitPlanModeResolved = (data: {
+      requestId: string;
+      sessionId: string;
+      approved: boolean;
+      respondedBy?: 'desktop' | 'mobile';
+      timestamp: number;
+    }) => {
+      logger.main.info('[AIService] ExitPlanMode resolved:', data.requestId, 'approved=', data.approved);
+      syncPendingPrompt(data.sessionId, false);
+      TrayManager.getInstance().onPromptResolved(data.sessionId);
+
+      getSessionStateManager().updateActivity({
+        sessionId: data.sessionId,
+        status: 'running',
+        isStreaming: true,
+      }).catch((err) => {
+        logger.main.error('[AIService] Failed to update session status to running after ExitPlanMode resolve:', err);
+      });
+    };
+    provider.removeAllListeners('exitPlanMode:resolved');
+    provider.on('exitPlanMode:resolved', onExitPlanModeResolved);
+
     // Listen for AskUserQuestion requests and forward to renderer
     const onAskUserQuestion = async (data: { questionId: string; sessionId: string; questions: any[]; timestamp: number }) => {
       // logger.main.info('[AIService] AskUserQuestion requested:', data.questionId);
-      safeSend(event, 'ai:askUserQuestion', data);
+      safeSend(event, 'ai:askUserQuestion', { ...data, workspacePath: effectiveWorkspacePath });
       syncPendingPrompt(data.sessionId, true);
       TrayManager.getInstance().onPromptCreated(data.sessionId);
 
@@ -717,7 +755,7 @@ export class MessageStreamingHandler {
     // Listen for AskUserQuestion answers and forward to renderer to update tool call display
     const onAskUserQuestionAnswered = (data: { questionId: string; sessionId: string; questions: any[]; answers: Record<string, string>; timestamp: number }) => {
       // logger.main.info('[AIService] AskUserQuestion answered:', data.questionId);
-      safeSend(event, 'ai:askUserQuestionAnswered', data);
+      safeSend(event, 'ai:askUserQuestionAnswered', { ...data, workspacePath: effectiveWorkspacePath });
       syncPendingPrompt(data.sessionId, false);
       TrayManager.getInstance().onPromptResolved(data.sessionId);
 
@@ -765,7 +803,7 @@ export class MessageStreamingHandler {
     // Listen for tool permission resolved and forward to renderer
     const onToolPermissionResolved = (data: { requestId: string; sessionId: string; response: any; timestamp: number }) => {
       logger.main.info('[AIService] Tool permission resolved:', data.requestId);
-      safeSend(event, 'ai:toolPermissionResolved', data);
+      safeSend(event, 'ai:toolPermissionResolved', { ...data, workspacePath: effectiveWorkspacePath });
       syncPendingPrompt(data.sessionId, false);
       TrayManager.getInstance().onPromptResolved(data.sessionId);
 

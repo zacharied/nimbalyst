@@ -648,6 +648,7 @@ export async function handleGitCommitProposal(
         commitWindow.webContents.send("ai:gitCommitProposalResolved", {
           sessionId: targetSessionId,
           proposalId,
+          workspacePath,
         });
         commitWindow.webContents.send("mcp:gitCommitProposal", {
           proposalId,
