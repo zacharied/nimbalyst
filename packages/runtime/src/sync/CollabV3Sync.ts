@@ -2100,14 +2100,22 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
         try {
           // First update metadata if provided
           if (metadata) {
+            const wireMetadata: Partial<SessionMetadata> = {
+              provider: metadata.provider,
+              model: metadata.model,
+              mode: metadata.mode as 'agent' | 'planning' | undefined,
+            };
+            // Title must be encrypted on the wire. The server stores ciphertext
+            // only; sending plaintext here would leak titles into DO SQLite
+            // (see also IndexRoom.encrypted_title for the index-side equivalent).
+            if (metadata.title && config.encryptionKey) {
+              const { encryptedTitle, titleIv } = await encryptTitle(metadata.title, config.encryptionKey);
+              wireMetadata.encryptedTitle = encryptedTitle;
+              wireMetadata.titleIv = titleIv;
+            }
             const metadataMsg: ClientMessage = {
               type: 'updateMetadata',
-              metadata: {
-                title: metadata.title,
-                provider: metadata.provider,
-                model: metadata.model,
-                mode: metadata.mode as 'agent' | 'planning' | undefined,
-              },
+              metadata: wireMetadata,
             };
             ws.send(JSON.stringify(metadataMsg));
           }

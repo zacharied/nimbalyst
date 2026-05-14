@@ -144,6 +144,12 @@ export class PersonalSessionRoom implements DurableObject {
       sql.exec(`DELETE FROM metadata`);
     }
 
+    // Migration: Drop any legacy plaintext `title` rows. Titles are E2E
+    // encrypted and live under `encrypted_title` + `title_iv`. Older clients
+    // sent plaintext titles via updateMetadata; this purges them on first
+    // load so the room can never serve plaintext to anyone again.
+    sql.exec(`DELETE FROM metadata WHERE key = 'title'`);
+
     // Bootstrap TTL alarm for existing sessions that don't have one yet
     const existingAlarm = await this.state.storage.getAlarm();
     if (!existingAlarm) {
@@ -513,9 +519,24 @@ export class PersonalSessionRoom implements DurableObject {
     connState: ConnectionState,
     updates: Partial<SessionMetadata>
   ): Promise<void> {
-    const now = Date.now();
+    // Defense-in-depth: titles are E2E encrypted. Old clients may still send a
+    // plaintext `title`; we drop it on the floor so it never lands in storage
+    // or in the broadcast we re-emit. The wire-protocol path of record is
+    // encryptedTitle + titleIv, stored as `encrypted_title` / `title_iv`.
+    const sanitized = { ...updates } as Partial<SessionMetadata> & { title?: unknown };
+    delete sanitized.title;
 
-    for (const [key, value] of Object.entries(updates)) {
+    const storageMap: Record<string, string | undefined> = {
+      encrypted_title: sanitized.encryptedTitle,
+      title_iv: sanitized.titleIv,
+    };
+    for (const [storageKey, value] of Object.entries(storageMap)) {
+      if (value !== undefined) {
+        this.setMetadataValue(storageKey, value);
+      }
+    }
+    for (const [key, value] of Object.entries(sanitized)) {
+      if (key === 'encryptedTitle' || key === 'titleIv') continue;
       if (value !== undefined) {
         this.setMetadataValue(key, typeof value === 'string' ? value : JSON.stringify(value));
       }
@@ -531,7 +552,7 @@ export class PersonalSessionRoom implements DurableObject {
     this.broadcast(
       {
         type: 'metadataBroadcast',
-        metadata: { ...updates },
+        metadata: sanitized,
         fromConnectionId: this.getConnectionId(ws),
       },
       ws
@@ -577,11 +598,12 @@ export class PersonalSessionRoom implements DurableObject {
     }
 
     return {
-      title: metadata.title ?? 'Untitled',
       provider: metadata.provider ?? 'unknown',
       model: metadata.model,
       mode: metadata.mode as SessionMetadata['mode'],
       // Server stores encrypted values opaquely - pass through as-is
+      encryptedTitle: metadata.encrypted_title,
+      titleIv: metadata.title_iv,
       encryptedProjectId: metadata.encrypted_project_id ?? '',
       projectIdIv: metadata.project_id_iv ?? '',
       createdAt: parseInt(metadata.created_at ?? '0', 10),
