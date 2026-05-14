@@ -17,6 +17,7 @@
  */
 
 import type { AgentMessage } from '../ai/server/types';
+import { truncateContentForSync } from './syncContentTruncator';
 import type {
   SyncConfig,
   SyncStatus,
@@ -1121,9 +1122,17 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
     message: AgentMessage,
     key: CryptoKey
   ): Promise<EncryptedMessage> {
+    // Trim large tool_result payloads before encryption so the SessionRoom
+    // doesn't store full Bash/Read/Grep output for every step. Local raw log
+    // keeps the unmodified content -- this only changes what crosses the wire.
+    const { content: truncatedContent } = truncateContentForSync(
+      message.content,
+      message.source,
+    );
+
     // Include hidden flag in encrypted content so it syncs to mobile
     const content = JSON.stringify({
-      content: message.content,
+      content: truncatedContent,
       metadata: message.metadata,
       hidden: message.hidden ?? false,
     });
