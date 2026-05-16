@@ -16,7 +16,7 @@ import { resolveRoleFieldName, getFieldByRole } from '../trackerRecordAccessors'
 // Types
 // ============================================================================
 
-export type ColumnRenderType = 'badge' | 'text' | 'date' | 'avatar' | 'progress' | 'tags' | 'type-icon' | 'module';
+export type ColumnRenderType = 'badge' | 'text' | 'date' | 'avatar' | 'progress' | 'tags' | 'type-icon' | 'module' | 'url';
 
 export interface TrackerColumnDef {
   /** Unique column ID -- matches the field name in the schema */
@@ -70,6 +70,7 @@ function inferRenderType(field: FieldDefinition): ColumnRenderType {
   if (field.type === 'array') return 'tags';
   if (field.type === 'user') return 'avatar';
   if (field.type === 'select') return 'badge';
+  if (field.type === 'url') return 'url';
   if (field.type === 'number' && field.max !== undefined && field.max <= 100) return 'progress';
   return 'text';
 }
@@ -84,6 +85,7 @@ function inferWidth(field: FieldDefinition, role?: TrackerSchemaRole): number | 
   if (field.type === 'number') return 60;
   if (field.type === 'date' || field.type === 'datetime') return 100;
   if (field.type === 'array') return 120;
+  if (field.type === 'url') return 200;
   return 120;
 }
 

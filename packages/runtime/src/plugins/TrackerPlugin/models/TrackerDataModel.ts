@@ -13,8 +13,18 @@ export type FieldType =
   | 'boolean'
   | 'user'
   | 'reference'
+  | 'url'
   | 'array'
   | 'object';
+
+/**
+ * Stored shape of a 'url' field. The label is optional and renders as the
+ * display text when present; otherwise the URL itself is shown.
+ */
+export interface UrlFieldValue {
+  url: string;
+  label?: string;
+}
 
 export interface FieldOption {
   value: string;
@@ -280,6 +290,31 @@ export class TrackerDataModelRegistry {
             });
           }
           break;
+
+        case 'url': {
+          const urlString = typeof value === 'string'
+            ? value
+            : (value && typeof value === 'object' && typeof (value as any).url === 'string')
+              ? (value as any).url
+              : undefined;
+          if (!urlString) {
+            errors.push({
+              field: field.name,
+              message: `Field '${field.name}' must be a URL string or { url, label }`,
+            });
+            break;
+          }
+          try {
+            // Throws on malformed URLs; accepts any scheme (http, https, mailto, etc.)
+            new URL(urlString);
+          } catch {
+            errors.push({
+              field: field.name,
+              message: `Field '${field.name}' is not a valid URL: ${urlString}`,
+            });
+          }
+          break;
+        }
       }
     }
 

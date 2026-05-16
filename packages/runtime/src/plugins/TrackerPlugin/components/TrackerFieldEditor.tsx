@@ -5,7 +5,7 @@
  */
 
 import React, { useState, useRef, useEffect } from 'react';
-import type { FieldDefinition } from '../models/TrackerDataModel';
+import type { FieldDefinition, UrlFieldValue } from '../models/TrackerDataModel';
 import { CustomSelect } from './CustomSelect';
 import { UserAvatar } from './UserAvatar';
 import { getInitials, stringToColor } from './trackerColumns';
@@ -249,6 +249,19 @@ export const TrackerFieldEditor: React.FC<TrackerFieldEditorProps> = ({
         </div>
       );
 
+    case 'url':
+      return (
+        <div className={wrapperClasses}>
+          <label htmlFor={fieldId} className={labelClasses}>{label}</label>
+          <UrlFieldInput
+            id={fieldId}
+            value={value}
+            onChange={onChange}
+            placeholder={field.required ? 'Required' : 'https://...'}
+          />
+        </div>
+      );
+
     case 'boolean':
       return (
         <div className={layout === 'horizontal' ? "flex flex-row items-center gap-2 min-w-[120px]" : "flex flex-row items-center min-w-[120px]"}>
@@ -426,6 +439,80 @@ const UserFieldInput: React.FC<{
           ))}
         </div>
       )}
+    </div>
+  );
+};
+
+/**
+ * Normalize a stored url field value to { url, label }. Legacy items may have
+ * stored a plain string, so we accept both shapes.
+ */
+function normalizeUrlValue(value: unknown): UrlFieldValue {
+  if (typeof value === 'string') return { url: value };
+  if (value && typeof value === 'object') {
+    const v = value as Partial<UrlFieldValue>;
+    return { url: typeof v.url === 'string' ? v.url : '', label: v.label };
+  }
+  return { url: '' };
+}
+
+/**
+ * URL field input: URL on top, optional display label below, with an "open"
+ * affordance to test the link in the user's default browser.
+ */
+const UrlFieldInput: React.FC<{
+  id: string;
+  value: unknown;
+  onChange: (value: UrlFieldValue | undefined) => void;
+  placeholder?: string;
+}> = ({ id, value, onChange, placeholder }) => {
+  const normalized = normalizeUrlValue(value);
+
+  const update = (next: UrlFieldValue) => {
+    // Persist empty values as undefined so optional URL fields don't store empty objects.
+    if (!next.url && !next.label) {
+      onChange(undefined);
+      return;
+    }
+    onChange({ url: next.url, label: next.label || undefined });
+  };
+
+  const canOpen = (() => {
+    if (!normalized.url) return false;
+    try { new URL(normalized.url); return true; } catch { return false; }
+  })();
+
+  return (
+    <div className="flex flex-col gap-1">
+      <div className="flex items-center gap-1.5">
+        <input
+          id={id}
+          type="url"
+          className={`${inputClasses} flex-1 min-w-0`}
+          value={normalized.url}
+          onChange={(e) => update({ ...normalized, url: e.target.value })}
+          placeholder={placeholder}
+          spellCheck={false}
+        />
+        {canOpen && (
+          <a
+            href={normalized.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-[var(--nim-text-faint)] hover:text-[var(--nim-primary)] p-1"
+            title="Open link"
+          >
+            <span className="material-symbols-outlined text-sm">open_in_new</span>
+          </a>
+        )}
+      </div>
+      <input
+        type="text"
+        className={`${inputClasses} text-[12px]`}
+        value={normalized.label || ''}
+        onChange={(e) => update({ ...normalized, label: e.target.value })}
+        placeholder="Display label (optional)"
+      />
     </div>
   );
 };

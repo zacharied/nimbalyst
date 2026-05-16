@@ -12,6 +12,10 @@ import chokidar from 'chokidar';
 import { BrowserWindow } from 'electron';
 import { safeHandle } from '../utils/ipcRegistry';
 import {
+  isTrackerSchemaFile,
+  shouldIgnoreTrackerWatchPath,
+} from './trackerSchemaWatchUtils';
+import {
   globalRegistry,
   loadBuiltinTrackers,
   parseTrackerYAML,
@@ -137,7 +141,9 @@ function watchSchemaDirectory(workspacePath: string): void {
   if (!fs.existsSync(trackersDir)) return;
 
   watcher = chokidar.watch(trackersDir, {
-    ignored: /(^|[/\\])\../, // ignore dotfiles
+    // Ignore dotfiles inside the watched directory, but do not ignore the
+    // parent `.nimbalyst` segment itself or chokidar drops every event.
+    ignored: (candidatePath: string) => shouldIgnoreTrackerWatchPath(trackersDir, candidatePath),
     ignoreInitial: true,
     awaitWriteFinish: { stabilityThreshold: 200 },
     depth: 0, // only watch the directory itself, not subdirs
@@ -145,17 +151,17 @@ function watchSchemaDirectory(workspacePath: string): void {
 
   watcher
     .on('change', (filePath: string) => {
-      if (filePath.endsWith('.yaml') || filePath.endsWith('.yml')) {
+      if (isTrackerSchemaFile(filePath)) {
         reloadWorkspaceSchema(filePath);
       }
     })
     .on('add', (filePath: string) => {
-      if (filePath.endsWith('.yaml') || filePath.endsWith('.yml')) {
+      if (isTrackerSchemaFile(filePath)) {
         reloadWorkspaceSchema(filePath);
       }
     })
     .on('unlink', (filePath: string) => {
-      if (filePath.endsWith('.yaml') || filePath.endsWith('.yml')) {
+      if (isTrackerSchemaFile(filePath)) {
         handleSchemaFileDeleted(filePath);
       }
     })

@@ -647,6 +647,32 @@ function renderCell(
           );
         }
 
+        case 'url': {
+          // Accept legacy plain-string values as well as { url, label } objects.
+          const urlStr = typeof value === 'string'
+            ? value
+            : (value && typeof value === 'object' && typeof (value as any).url === 'string')
+              ? (value as any).url
+              : '';
+          if (!urlStr) return null;
+          const labelStr = (value && typeof value === 'object' && typeof (value as any).label === 'string')
+            ? (value as any).label
+            : '';
+          return (
+            <a
+              href={urlStr}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-[var(--nim-primary)] hover:underline text-xs inline-flex items-center gap-1 max-w-full overflow-hidden text-ellipsis whitespace-nowrap"
+              title={urlStr}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <span className="material-symbols-outlined text-[11px] shrink-0">link</span>
+              <span className="overflow-hidden text-ellipsis">{labelStr || urlStr}</span>
+            </a>
+          );
+        }
+
         default:
           if (Array.isArray(value)) return <span className="text-[var(--nim-text-muted)] text-xs">{value.join(', ')}</span>;
           return <span className="text-[var(--nim-text-muted)] text-xs">{String(value)}</span>;

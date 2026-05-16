@@ -20,6 +20,7 @@ import {
 import type { ComponentType } from 'react';
 import * as path from 'path';
 import { getDocumentService } from '../services/RendererDocumentService';
+import { applySchemasToRegistry } from './trackerSchemaRegistryUtils';
 
 const SOURCE = 'tracker';
 
@@ -34,18 +35,10 @@ export async function registerTrackerPlugin(workspacePath?: string | null): Prom
   if (api?.trackerSchema?.getAll) {
     try {
       const schemas = await api.trackerSchema.getAll();
-      if (schemas && schemas.length > 0) {
-        for (const schema of schemas as Parameters<typeof globalRegistry.register>[0][]) {
-          globalRegistry.register(schema);
-        }
-        api.trackerSchema.onChanged?.((updatedSchemas) => {
-          for (const schema of updatedSchemas as Parameters<typeof globalRegistry.register>[0][]) {
-            globalRegistry.register(schema);
-          }
-        });
-      } else {
-        loadBuiltinTrackers();
-      }
+      applySchemasToRegistry(schemas ?? []);
+      api.trackerSchema.onChanged?.((updatedSchemas) => {
+        applySchemasToRegistry(updatedSchemas ?? []);
+      });
     } catch {
       loadBuiltinTrackers();
     }
