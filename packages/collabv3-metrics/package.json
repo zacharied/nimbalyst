@@ -6,8 +6,12 @@
   "description": "Self-hosted single-user dashboard for the CollabV3 nimbalyst_sync Analytics Engine dataset",
   "type": "module",
   "scripts": {
-    "dev": "wrangler pages dev public --port 8791",
-    "deploy": "wrangler pages deploy public --project-name nimbalyst-collabv3-metrics",
+    "dev": "XDG_CONFIG_HOME=\"$HOME/.config/nimbalyst\" wrangler pages dev public --port 8791",
+    "deploy": "XDG_CONFIG_HOME=\"$HOME/.config/nimbalyst\" wrangler pages deploy public --project-name nimbalyst-collabv3-metrics",
+    "login": "XDG_CONFIG_HOME=\"$HOME/.config/nimbalyst\" wrangler login",
+    "logout": "XDG_CONFIG_HOME=\"$HOME/.config/nimbalyst\" wrangler logout",
+    "whoami": "XDG_CONFIG_HOME=\"$HOME/.config/nimbalyst\" wrangler whoami",
+    "wrangler": "XDG_CONFIG_HOME=\"$HOME/.config/nimbalyst\" wrangler",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {

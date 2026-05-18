@@ -95,6 +95,45 @@ The dev server runs on `http://localhost:8790` by default.
 | `npm run test:watch` | Run tests in watch mode |
 | `npm run typecheck` | Type check without emitting |
 
+## Cloudflare account isolation
+
+This worker deploys to the **Nimbalyst** Cloudflare account
+(`454b0e55f2d7f9abc0d52d4217ecdc3c`). To keep that account's OAuth
+credentials separate from any personal or other-org Cloudflare logins,
+every npm script and shell script that shells out to wrangler sets:
+
+```
+XDG_CONFIG_HOME="$HOME/.config/nimbalyst"
+```
+
+Wrangler's internal config path resolver (`xdg-app-paths`) honors
+`XDG_CONFIG_HOME` and appends `.wrangler`, so this redirects wrangler's
+global config (OAuth tokens, account selection, telemetry prefs) into
+`~/.config/nimbalyst/.wrangler/` -- isolated from the default
+`~/Library/Preferences/.wrangler` that any other Cloudflare login on this
+machine writes to. The same `XDG_CONFIG_HOME` is reused by
+`packages/marketplace` and `packages/collabv3-metrics` so a single
+`npm run login` covers all three. (The env var is set only for the
+spawned wrangler process; it does not leak into your shell.)
+
+Note: `WRANGLER_HOME` is not honored by wrangler v3+ -- use
+`XDG_CONFIG_HOME` (which wrangler picks up via `xdg-app-paths`).
+
+**One-time setup on a new machine:**
+
+```bash
+cd packages/collabv3
+npm install
+npm run login        # opens browser; sign in as the Nimbalyst account
+npm run whoami       # sanity-check: should print the Nimbalyst account
+```
+
+Use `npm run wrangler -- <subcommand>` for any wrangler command not
+already aliased (e.g. `npm run wrangler -- secret put STYTCH_SECRET_KEY`,
+`npm run wrangler -- tail`). Running `wrangler` directly from the shell
+will use the default config dir and may pick a different account -- always
+go through the npm scripts.
+
 ## Configuration
 
 ### Environment Variables

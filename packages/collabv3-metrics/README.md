@@ -37,6 +37,28 @@ packages/collabv3-metrics/
 
 No build step. Chart.js is loaded from a CDN. Pages serves `public/` as static assets, and Cloudflare automatically wires up `functions/` as Pages Functions.
 
+## Cloudflare account isolation
+
+This Pages project deploys to the **Nimbalyst** Cloudflare account
+(`454b0e55f2d7f9abc0d52d4217ecdc3c`). Every npm script that shells out to
+wrangler sets:
+
+```
+XDG_CONFIG_HOME="$HOME/.config/nimbalyst"
+```
+
+Wrangler reads its OAuth tokens from `~/.config/nimbalyst/.wrangler/`,
+isolated from any other Cloudflare accounts on this machine. The same
+`XDG_CONFIG_HOME` is reused by `packages/collabv3` and
+`packages/marketplace` so one `npm run login` covers all three. Always
+use `npm run wrangler -- <subcommand>` instead of bare `wrangler` (or
+`npx wrangler`) so the right config dir is in scope.
+
+```bash
+npm run login        # one-time: sign in to the Nimbalyst account
+npm run whoami       # sanity-check the active account
+```
+
 ## Initial setup
 
 These steps are manual (one-time per environment) and are deliberately not automated.
@@ -55,7 +77,7 @@ Save the token. Do not use the Global API Key.
 ### 2. Find the account ID
 
 ```
-npx wrangler whoami
+npm run whoami
 ```
 
 Copy the account ID associated with the Nimbalyst account.
@@ -68,7 +90,7 @@ Update the `CF_ACCOUNT_ID` value in `wrangler.toml` (it is a `vars` entry, not a
 
 ```
 cd packages/collabv3-metrics
-npx wrangler pages deploy public --project-name nimbalyst-collabv3-metrics
+npm run deploy
 ```
 
 The first deploy creates the project on `https://nimbalyst-collabv3-metrics.pages.dev`. Pages Functions inside `functions/` are uploaded automatically on the same deploy.
@@ -76,7 +98,7 @@ The first deploy creates the project on `https://nimbalyst-collabv3-metrics.page
 ### 5. Set the API token secret
 
 ```
-npx wrangler pages secret put CF_API_TOKEN --project-name nimbalyst-collabv3-metrics
+npm run wrangler -- pages secret put CF_API_TOKEN --project-name nimbalyst-collabv3-metrics
 ```
 
 Paste the token from step 1 when prompted. (The dashboard at Pages -> Settings -> Environment variables works equivalently.)
@@ -140,7 +162,7 @@ The email rule is the actual gate. The GitHub rule narrows which IdP can satisfy
 
 ```
 cd packages/collabv3-metrics
-npx wrangler pages deploy public --project-name nimbalyst-collabv3-metrics
+npm run deploy
 ```
 
 Pages Functions in `functions/api/query.ts` are bundled into the same deployment automatically; no separate command is needed.
@@ -157,7 +179,7 @@ Each query must `SELECT ... FROM nimbalyst_sync ...` -- the Pages Function rejec
 
 ```
 cd packages/collabv3-metrics
-npx wrangler pages dev public --port 8791
+npm run dev
 ```
 
 `wrangler pages dev` serves the static site and the Pages Function locally. The Function still needs `CF_API_TOKEN` and `CF_ACCOUNT_ID` to reach the upstream API; pass them via a local `.dev.vars` file (do NOT commit it):

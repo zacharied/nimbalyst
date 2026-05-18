@@ -24,6 +24,10 @@
 
 set -euo pipefail
 
+# Pin wrangler's config dir to the Nimbalyst OAuth profile so this script
+# can't accidentally upload R2 objects into the wrong Cloudflare account.
+export XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config/nimbalyst}"
+
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 COLLABV3_DIR="$(dirname "$SCRIPT_DIR")"
 REPO_ROOT="$(dirname "$(dirname "$COLLABV3_DIR")")"

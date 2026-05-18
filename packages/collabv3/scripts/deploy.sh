@@ -30,6 +30,11 @@ PKG_DIR="$(dirname "$SCRIPT_DIR")"
 
 cd "$PKG_DIR"
 
+# Pin wrangler's config dir to the Nimbalyst OAuth profile so deploys can't
+# accidentally land on whatever Cloudflare account is selected in the
+# default config. Mirrors the npm scripts in package.json.
+export XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config/nimbalyst}"
+
 # Bump version in package.json (suppress npm output, no git tag)
 npm version "$BUMP_TYPE" --no-git-tag-version > /dev/null 2>&1
 
