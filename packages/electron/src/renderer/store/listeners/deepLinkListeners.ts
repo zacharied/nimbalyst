@@ -6,18 +6,18 @@
  * - Central listeners update atoms / dispatch
  * - Components react to the atoms
  *
- * Two delivery paths for shared-document links:
- * - Live: main sends `deep-link:open-shared-document` to an already-mounted
- *   window when a link arrives.
+ * Two delivery paths for each link kind:
+ * - Live: main sends an event to an already-mounted window.
  * - Pending queue: when main creates a new window to host the link's
  *   workspace, the renderer drains the queued payload via
- *   `deep-link:consume-pending-shared-doc` on listener init and again any
- *   time the active workspace changes (covers rail-switch flows too).
+ *   `deep-link:consume-pending-*` on listener init and again any time the
+ *   active workspace changes (covers rail-switch flows too).
  */
 
 import { store } from '../index';
 import { setWindowModeAtom } from '../atoms/windowMode';
 import { pendingCollabDocumentAtom } from '../atoms/collabDocuments';
+import { setTrackerModeLayoutAtom } from '../atoms/trackers';
 import { activeWorkspacePathAtom } from '../atoms/openProjects';
 import { errorNotificationService } from '../../services/ErrorNotificationService';
 
@@ -27,30 +27,50 @@ interface SharedDocPayload {
   workspacePath: string;
 }
 
+interface TrackerPayload {
+  trackerId: string;
+  orgId: string;
+  workspacePath: string;
+}
+
+function ensureActiveWorkspace(workspacePath: string): void {
+  const activePath = store.get(activeWorkspacePathAtom);
+  if (activePath !== workspacePath) {
+    // The matching workspace is warm in the project rail but not the
+    // visible one. Switch to it first.
+    store.set(activeWorkspacePathAtom, workspacePath);
+  }
+}
+
 function applySharedDocPayload(data: SharedDocPayload): void {
   if (!data?.documentId || !data?.workspacePath) return;
-
-  const activePath = store.get(activeWorkspacePathAtom);
-  if (activePath !== data.workspacePath) {
-    // The matching workspace is warm in the project rail but not the
-    // visible one. Switch to it before opening the document.
-    store.set(activeWorkspacePathAtom, data.workspacePath);
-  }
-
+  ensureActiveWorkspace(data.workspacePath);
   store.set(setWindowModeAtom, 'collab');
   store.set(pendingCollabDocumentAtom, { documentId: data.documentId });
+}
+
+function applyTrackerPayload(data: TrackerPayload): void {
+  if (!data?.trackerId || !data?.workspacePath) return;
+  ensureActiveWorkspace(data.workspacePath);
+  store.set(setWindowModeAtom, 'tracker');
+  // 'all' so the tracker shows in the list regardless of its primaryType.
+  store.set(setTrackerModeLayoutAtom, {
+    selectedType: 'all',
+    selectedItemId: data.trackerId,
+  });
 }
 
 async function drainPendingFor(workspacePath: string | null): Promise<void> {
   if (!workspacePath) return;
   try {
-    const pending = await window.electronAPI.invoke(
-      'deep-link:consume-pending-shared-doc',
-      workspacePath
-    ) as SharedDocPayload | null;
-    if (pending) applySharedDocPayload(pending);
+    const [docPending, trackerPending] = await Promise.all([
+      window.electronAPI.invoke('deep-link:consume-pending-shared-doc', workspacePath) as Promise<SharedDocPayload | null>,
+      window.electronAPI.invoke('deep-link:consume-pending-tracker', workspacePath) as Promise<TrackerPayload | null>,
+    ]);
+    if (docPending) applySharedDocPayload(docPending);
+    if (trackerPending) applyTrackerPayload(trackerPending);
   } catch (err) {
-    console.error('[DeepLink] Failed to consume pending shared doc:', err);
+    console.error('[DeepLink] Failed to consume pending payload:', err);
   }
 }
 
@@ -60,10 +80,17 @@ async function drainPendingFor(workspacePath: string | null): Promise<void> {
 export function initDeepLinkListeners(): () => void {
   const cleanups: Array<() => void> = [];
 
-  // Live: main sends this when an already-running window matches the link.
+  // Live: shared document link routed to this window.
   cleanups.push(
     window.electronAPI.on('deep-link:open-shared-document', (data: SharedDocPayload) => {
       applySharedDocPayload(data);
+    })
+  );
+
+  // Live: tracker link routed to this window.
+  cleanups.push(
+    window.electronAPI.on('deep-link:open-tracker', (data: TrackerPayload) => {
+      applyTrackerPayload(data);
     })
   );
 
@@ -88,6 +115,29 @@ export function initDeepLinkListeners(): () => void {
         );
       }
       console.warn('[DeepLink] No workspace available for shared doc:', data);
+    })
+  );
+
+  cleanups.push(
+    window.electronAPI.on('deep-link:tracker-not-available', (data: {
+      trackerId: string;
+      orgId: string;
+      reason?: 'not-authenticated' | 'no-workspace';
+    }) => {
+      if (data?.reason === 'not-authenticated') {
+        errorNotificationService.showWarning(
+          'Sign in required',
+          'Sign in to your Nimbalyst team account to open this tracker.',
+          { duration: 6000 }
+        );
+      } else {
+        errorNotificationService.showWarning(
+          'No matching workspace',
+          'You do not have a workspace open for the team that owns this tracker.',
+          { duration: 6000 }
+        );
+      }
+      console.warn('[DeepLink] No workspace available for tracker:', data);
     })
   );
 

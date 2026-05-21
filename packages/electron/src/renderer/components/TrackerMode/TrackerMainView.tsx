@@ -24,6 +24,8 @@ import {
   type TrackerFilterChip,
   type TypeColumnConfig,
 } from '../../store/atoms/trackers';
+import { activeTeamOrgIdAtom, buildTrackerDeepLink } from '../../store/atoms/collabDocuments';
+import { errorNotificationService } from '../../services/ErrorNotificationService';
 import { useTrackerBodyPrewarm } from '../../hooks/useTrackerBodyPrewarm';
 import { getDefaultColumnConfig } from '@nimbalyst/runtime/plugins/TrackerPlugin';
 import { setSelectedWorkstreamAtom, sessionRegistryAtom, refreshSessionListAtom, initSessionList } from '../../store/atoms/sessions';
@@ -365,6 +367,26 @@ export const TrackerMainView: React.FC<TrackerMainViewProps> = ({
     }
   }, [selectedItemId, setModeLayout]);
 
+  const teamOrgId = useAtomValue(activeTeamOrgIdAtom);
+  const handleCopyDeepLink = useCallback(async (itemId: string) => {
+    if (!teamOrgId) return;
+    const url = buildTrackerDeepLink(itemId, teamOrgId);
+    try {
+      await navigator.clipboard.writeText(url);
+      errorNotificationService.showInfo(
+        'Link copied',
+        'Paste it anywhere to open this tracker in Nimbalyst.',
+        { duration: 3000 }
+      );
+    } catch (err) {
+      console.error('[TrackerMainView] Failed to copy link:', err);
+      errorNotificationService.showError(
+        'Copy failed',
+        'Could not write the link to the clipboard.'
+      );
+    }
+  }, [teamOrgId]);
+
   /** Bulk archive for multi-select context menu */
   const handleArchiveItems = useCallback(async (itemIds: string[], archive: boolean) => {
     for (const itemId of itemIds) {
@@ -601,6 +623,7 @@ export const TrackerMainView: React.FC<TrackerMainViewProps> = ({
               overrideItems={filteredItems}
               onArchiveItems={handleArchiveItems}
               onDeleteItems={handleDeleteItems}
+              onCopyDeepLink={teamOrgId ? handleCopyDeepLink : undefined}
               searchQuery={searchQuery}
               columnConfig={columnConfig}
               onColumnConfigChange={handleColumnConfigChange}
@@ -615,6 +638,7 @@ export const TrackerMainView: React.FC<TrackerMainViewProps> = ({
               overrideItems={filteredItems}
               onArchiveItems={handleArchiveItems}
               onDeleteItems={handleDeleteItems}
+              onCopyDeepLink={teamOrgId ? handleCopyDeepLink : undefined}
             />
           )}
 

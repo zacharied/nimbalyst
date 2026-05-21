@@ -52,6 +52,10 @@ interface TrackerTableProps {
   onArchiveItems?: (itemIds: string[], archive: boolean) => void;
   /** Callback for bulk/single delete action */
   onDeleteItems?: (itemIds: string[]) => void;
+  /** Copy a shareable deep link for the given tracker item. Only shown when
+   *  exactly one item is selected. Callers omit this when the workspace
+   *  has no team configured. */
+  onCopyDeepLink?: (itemId: string) => void;
   /** External search query from parent toolbar (replaces internal search input) */
   searchQuery?: string;
   /** Column configuration (visible columns, order, widths) */
@@ -693,6 +697,7 @@ export function TrackerTable({
   overrideItems,
   onArchiveItems,
   onDeleteItems,
+  onCopyDeepLink,
   searchQuery: externalSearchQuery,
   columnConfig: externalColumnConfig,
   onColumnConfigChange,
@@ -1658,6 +1663,21 @@ export function TrackerTable({
           </ContextSubmenu>
 
           <div className="border-b border-[var(--nim-border)] my-1" />
+
+          {/* Copy Link (single-selection only) */}
+          {onCopyDeepLink && selectedIds.size === 1 && (
+            <button
+              className="w-full flex items-center gap-2 px-3 py-1.5 text-left text-[var(--nim-text)] hover:bg-[var(--nim-bg-hover)] cursor-pointer"
+              onClick={() => {
+                const [onlyId] = selectedIds;
+                closeContextMenu();
+                onCopyDeepLink(onlyId);
+              }}
+            >
+              <span className="material-symbols-outlined text-sm">link</span>
+              Copy Link
+            </button>
+          )}
 
           {/* Archive */}
           {onArchiveItems && (

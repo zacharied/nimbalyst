@@ -655,6 +655,17 @@ safeHandle('deep-link:consume-pending-shared-doc', (_event, workspacePath: strin
     return { ...pending, workspacePath };
 });
 
+// Same pattern for tracker deep links: nimbalyst://tracker/{trackerId}?orgId=...
+const pendingTrackerLinks = new Map<string, { trackerId: string; orgId: string }>();
+
+safeHandle('deep-link:consume-pending-tracker', (_event, workspacePath: string) => {
+    if (!workspacePath) return null;
+    const pending = pendingTrackerLinks.get(workspacePath);
+    if (!pending) return null;
+    pendingTrackerLinks.delete(workspacePath);
+    return { ...pending, workspacePath };
+});
+
 // Sensitive query params that must not be logged verbatim. Anything not in
 // this set is logged as-is so worker-supplied error codes/messages are visible.
 const SENSITIVE_DEEP_LINK_PARAMS = new Set([
@@ -801,6 +812,26 @@ async function handleDeepLink(url: string): Promise<void> {
             }
 
             await openSharedDocumentFromDeepLink(documentId, orgId);
+        } else if (parsed.host === 'tracker' || parsed.pathname?.startsWith('/tracker/')) {
+            // Handle tracker link: nimbalyst://tracker/{trackerId}?orgId={orgId}
+            const encoded = parsed.host === 'tracker'
+                ? parsed.pathname?.replace(/^\//, '')
+                : parsed.pathname?.replace('/tracker/', '');
+            let trackerId: string | undefined;
+            try {
+                trackerId = encoded ? decodeURIComponent(encoded) : undefined;
+            } catch {
+                logger.main.warn('[DeepLink] Tracker link has malformed trackerId:', summarizeDeepLink(url));
+                return;
+            }
+            const orgId = parsed.searchParams.get('orgId');
+
+            if (!trackerId || !orgId) {
+                logger.main.warn('[DeepLink] Tracker link missing trackerId or orgId:', summarizeDeepLink(url));
+                return;
+            }
+
+            await openTrackerFromDeepLink(trackerId, orgId);
         } else {
             logger.main.warn('[DeepLink] Unknown deep link:', summarizeDeepLink(url));
         }
@@ -886,6 +917,44 @@ async function openSharedDocumentFromDeepLink(documentId: string, orgId: string)
     // No window has this workspace open — create one. The renderer's
     // deep-link listener will drain the pending queue once it mounts.
     logger.main.info('[DeepLink] Opening new window for shared doc workspace:', { workspacePath, documentId });
+    createWindow(false, true, workspacePath);
+}
+
+/**
+ * Route a tracker deep link to the matching team workspace. Mirrors the
+ * shared-document flow, but targets tracker mode + tracker-item selection.
+ */
+async function openTrackerFromDeepLink(trackerId: string, orgId: string): Promise<void> {
+    const reason = !isAuthenticated() ? 'not-authenticated' : 'no-workspace';
+    const workspacePath = isAuthenticated() ? await findWorkspaceForOrgId(orgId) : null;
+
+    if (!workspacePath) {
+        logger.main.warn('[DeepLink] Cannot route tracker:', { reason, orgId, trackerId });
+        const fallback = getMostRecentlyFocusedWorkspaceWindow();
+        if (fallback) {
+            if (fallback.isMinimized()) fallback.restore();
+            fallback.focus();
+            fallback.webContents.send('deep-link:tracker-not-available', { trackerId, orgId, reason });
+        }
+        return;
+    }
+
+    pendingTrackerLinks.set(workspacePath, { trackerId, orgId });
+
+    const existing = findWindowByWorkspace(workspacePath);
+    if (existing && !existing.isDestroyed()) {
+        if (existing.isMinimized()) existing.restore();
+        existing.focus();
+        existing.webContents.send('deep-link:open-tracker', {
+            trackerId,
+            orgId,
+            workspacePath,
+        });
+        logger.main.info('[DeepLink] Routed tracker to existing window:', { workspacePath, trackerId });
+        return;
+    }
+
+    logger.main.info('[DeepLink] Opening new window for tracker workspace:', { workspacePath, trackerId });
     createWindow(false, true, workspacePath);
 }
 

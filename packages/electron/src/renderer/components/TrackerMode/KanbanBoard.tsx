@@ -75,6 +75,10 @@ interface KanbanBoardProps {
   onArchiveItems?: (itemIds: string[], archive: boolean) => void;
   /** Callback for bulk/single delete action */
   onDeleteItems?: (itemIds: string[]) => void;
+  /** Copy a shareable deep link for the given tracker item. Only shown when
+   *  exactly one item is selected. Callers omit this when the workspace
+   *  has no team configured. */
+  onCopyDeepLink?: (itemId: string) => void;
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -158,6 +162,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
   overrideItems,
   onArchiveItems,
   onDeleteItems,
+  onCopyDeepLink,
 }) => {
   // Items always come from the caller (TrackerMainView passes atom-sourced items).
   // KanbanBoard no longer loads its own data -- single source of truth via Jotai atoms.
@@ -796,6 +801,20 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
           </KanbanContextSubmenu>
 
           <div className="border-b border-nim my-1" />
+
+          {onCopyDeepLink && selectedIds.size === 1 && (
+            <button
+              className="w-full flex items-center gap-2 px-3 py-1.5 text-left text-nim hover:bg-nim-tertiary cursor-pointer"
+              onClick={() => {
+                const [onlyId] = selectedIds;
+                closeContextMenu();
+                onCopyDeepLink(onlyId);
+              }}
+            >
+              <MaterialSymbol icon="link" size={16} />
+              Copy Link
+            </button>
+          )}
 
           {onArchiveItems && (
             <button

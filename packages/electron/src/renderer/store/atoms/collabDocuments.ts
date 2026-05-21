@@ -134,6 +134,15 @@ export function buildSharedDocumentDeepLink(documentId: string, orgId: string): 
 }
 
 /**
+ * Build a deep link to a tracker item. Same routing semantics as shared
+ * documents: the recipient's app uses the orgId to find the matching team
+ * workspace and opens the tracker in tracker mode.
+ */
+export function buildTrackerDeepLink(trackerId: string, orgId: string): string {
+  return `nimbalyst://tracker/${encodeURIComponent(trackerId)}?orgId=${encodeURIComponent(orgId)}`;
+}
+
+/**
  * Pending document to auto-open in CollabMode after switching modes.
  * Set by "Share to Team" action, consumed by CollabMode on activation.
  * Cleared after consumption. Carries initialContent for first-time shares

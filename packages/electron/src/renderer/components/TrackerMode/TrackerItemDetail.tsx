@@ -21,6 +21,8 @@ import { TrackerFieldEditor, type TeamMemberOption } from '@nimbalyst/runtime/pl
 import { UserAvatar } from '@nimbalyst/runtime/plugins/TrackerPlugin/components/UserAvatar';
 import { trackerItemByIdAtom } from '@nimbalyst/runtime/plugins/TrackerPlugin/trackerDataAtoms';
 import { refreshSessionListAtom, sessionRegistryAtom, type SessionMeta } from '../../store/atoms/sessions';
+import { buildTrackerDeepLink } from '../../store/atoms/collabDocuments';
+import { errorNotificationService } from '../../services/ErrorNotificationService';
 import { getRelativeTimeString } from '../../utils/dateFormatting';
 import { useTrackerContentCollab } from '../../hooks/useTrackerContentCollab';
 
@@ -186,18 +188,48 @@ export const TrackerItemDetail: React.FC<TrackerItemDetailProps> = ({
 
   const model = useMemo(() => globalRegistry.get(item?.primaryType ?? ''), [item?.primaryType]);
 
-  // Detect whether this workspace has a team. Result drives both the
-  // member-picker dropdown and the content editor mode (collab vs local).
-  // Tri-state: `undefined` = check pending, `{ orgId: null }` = confirmed
-  // no team, `{ orgId: '...' }` = team found.
-  const [teamInfo, setTeamInfo] = useState<{ orgId: string | null; members: TeamMemberOption[] } | undefined>(undefined);
+  // Detect whether this workspace has a team. The team check feeds the
+  // content editor mode (collab vs local); the member list feeds the
+  // assignee picker. NIM-638: these are split into two effects so a slow
+  // or hung `team:list-members` doesn't strand `teamOrgId === undefined`
+  // and keep the collab editor stuck on "Connecting..." forever -- the
+  // editor only needs the orgId, not the members.
+  //
+  // Tri-state `teamOrgId`:
+  //   undefined -- team lookup pending
+  //   null      -- confirmed no team for this workspace
+  //   string    -- orgId resolved
+  const [teamOrgId, setTeamOrgId] = useState<string | null | undefined>(undefined);
+  const [teamMembers, setTeamMembers] = useState<TeamMemberOption[]>([]);
+
+  const handleCopyLink = useCallback(async () => {
+    if (!item || !teamOrgId) return;
+    const url = buildTrackerDeepLink(item.id, teamOrgId);
+    try {
+      await navigator.clipboard.writeText(url);
+      errorNotificationService.showInfo(
+        'Link copied',
+        'Paste it anywhere to open this tracker in Nimbalyst.',
+        { duration: 3000 }
+      );
+    } catch (err) {
+      console.error('[TrackerItemDetail] Failed to copy link:', err);
+      errorNotificationService.showError(
+        'Copy failed',
+        'Could not write the link to the clipboard.'
+      );
+    }
+  }, [item, teamOrgId]);
+
   useEffect(() => {
     if (!workspacePath) {
-      setTeamInfo({ orgId: null, members: [] });
+      setTeamOrgId(null);
+      setTeamMembers([]);
       return;
     }
     let cancelled = false;
-    setTeamInfo(undefined);
+    setTeamOrgId(undefined);
+    setTeamMembers([]);
     (async () => {
       try {
         const teamResult = await window.electronAPI.invoke('team:find-for-workspace', workspacePath);
@@ -205,27 +237,39 @@ export const TrackerItemDetail: React.FC<TrackerItemDetailProps> = ({
         const orgId: string | null = teamResult?.success && teamResult.team?.orgId
           ? teamResult.team.orgId
           : null;
-        if (!orgId) {
-          setTeamInfo({ orgId: null, members: [] });
-          return;
-        }
-        const membersResult = await window.electronAPI.invoke('team:list-members', orgId);
+        setTeamOrgId(orgId);
+      } catch {
+        if (!cancelled) setTeamOrgId(null);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [workspacePath]);
+  // Members load on a separate effect keyed on the resolved orgId so a
+  // slow members call cannot block the editor. The list-members IPC has
+  // its own server-side timeout (see fetchTeamApi); on failure the
+  // assignee picker degrades to an empty list, which is fine.
+  useEffect(() => {
+    if (typeof teamOrgId !== 'string') {
+      setTeamMembers([]);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const membersResult = await window.electronAPI.invoke('team:list-members', teamOrgId);
         if (cancelled) return;
         const members: TeamMemberOption[] = membersResult?.success && membersResult.members
           ? membersResult.members
               .filter((m: any) => m.email)
               .map((m: any) => ({ email: m.email, name: m.name || undefined }))
           : [];
-        setTeamInfo({ orgId, members });
+        setTeamMembers(members);
       } catch {
-        if (!cancelled) setTeamInfo({ orgId: null, members: [] });
+        if (!cancelled) setTeamMembers([]);
       }
     })();
     return () => { cancelled = true; };
-  }, [workspacePath]);
-  const teamMembers = teamInfo?.members ?? [];
-  // `undefined` while pending, `null` when confirmed no team, string when found.
-  const teamOrgId: string | null | undefined = teamInfo === undefined ? undefined : teamInfo.orgId;
+  }, [teamOrgId]);
   const typeColor = TYPE_COLORS[item?.primaryType ?? ''] || '#6b7280';
   const icon = model?.icon || getTypeIcon(item?.primaryType ?? '');
 
@@ -453,6 +497,7 @@ export const TrackerItemDetail: React.FC<TrackerItemDetailProps> = ({
     acceptRemoteChanges,
     rejectRemoteChanges,
     providerEpoch,
+    bodyCacheMarkdown,
   } = useTrackerContentCollab({
     itemId,
     workspacePath,
@@ -474,6 +519,54 @@ export const TrackerItemDetail: React.FC<TrackerItemDetailProps> = ({
   useEffect(() => {
     if (collabStatus === 'connected') setHasSyncedOnce(true);
   }, [collabStatus]);
+
+  // Defensive cold-paint fallback for shared `fullDocument` trackers.
+  //
+  // The happy path: `useTrackerContentCollab` provides `initialEditorState`
+  // built from `tracker_body_cache`, CollaborationPlugin's `_xmlText._length`
+  // check fires bootstrap, the seed runs, content renders.
+  //
+  // The seam this catches: in prod we have seen the WebSocket reach
+  // `connected` for a shared tracker, the `tracker_body_cache` row has
+  // valid body bytes, AND no `initialEditorState fn CALLED` log fires --
+  // the editor stays empty. The most likely cause is that
+  // `@lexical/yjs` considers the shared XmlText non-empty after the
+  // server-sync response is applied (the binding writes a root element
+  // even when the room has never been seeded with real content), so
+  // bootstrap is suppressed and the seed never gets a chance.
+  //
+  // This effect: 600ms after status reaches `connected`, if we have
+  // cached body markdown AND the editor is visually empty, apply the
+  // cached markdown via `editor.update()`. Going through the editor
+  // (rather than `editor.parseEditorState`) means the change propagates
+  // through `@lexical/yjs` into the Y.Doc, so peers receive the body
+  // via the normal CRDT merge -- the empty server room finally gets
+  // populated.
+  const collabEditorInstanceRef = useRef<any>(null);
+  useEffect(() => {
+    if (collabStatus !== 'connected') return;
+    if (!bodyCacheMarkdown || bodyCacheMarkdown.trim().length === 0) return;
+    const t = setTimeout(() => {
+      const editor = collabEditorInstanceRef.current;
+      const getContent = getContentFnRef.current;
+      if (!editor || !getContent) return;
+      const current = getContent();
+      // The check must be `trim() === ''` -- a fresh Lexical doc renders
+      // as a single empty paragraph that serializes to '' after trim, so
+      // anything content-bearing returns a non-empty trimmed string.
+      if (current.trim() !== '') return;
+      console.warn(
+        '[TrackerItemDetail] Cold-paint fallback firing: editor is empty after sync(connected) but tracker_body_cache has bytes. Forcing paint.',
+        { itemId, mdLen: bodyCacheMarkdown.length, providerEpoch },
+      );
+      editor.update(() => {
+        const root = $getRoot();
+        root.clear();
+        $convertFromEnhancedMarkdownString(bodyCacheMarkdown, getEditorTransformers());
+      });
+    }, 600);
+    return () => clearTimeout(t);
+  }, [collabStatus, bodyCacheMarkdown, providerEpoch, itemId]);
 
   /** Save a field update -- routes to file-based save for file-backed items, DB for native */
   const saveField = useCallback(async (updates: Record<string, any>) => {
@@ -730,8 +823,12 @@ export const TrackerItemDetail: React.FC<TrackerItemDetailProps> = ({
     // back to the per-item PGLite markdown for new items that have never
     // been saved (no cache row yet).
     const hookInitial = collabConfig.initialEditorState;
-    console.log('[TrackerItemDetail] Building collab editor config',
-      { itemId: item?.id, shouldBootstrap: collabConfig.shouldBootstrap, mdContentLen: mdContent?.length ?? 0, hasHookInitial: !!hookInitial });
+    // electron-log's renderer transport serializes only the first arg
+    // as a string -- inline the diagnostic into the message itself so
+    // a future cold-paint failure is debuggable from the log file.
+    console.log(
+      `[TrackerItemDetail] Building collab editor config itemId=${item?.id} shouldBootstrap=${collabConfig.shouldBootstrap} mdContentLen=${mdContent?.length ?? 0} hasHookInitial=${!!hookInitial}`,
+    );
     return {
       isRichText: true,
       editable: true,
@@ -763,6 +860,12 @@ export const TrackerItemDetail: React.FC<TrackerItemDetailProps> = ({
           // empty on mount before the Y.Doc sync has populated content.
           saveContent(markdown, true);
         }
+      },
+      onEditorReady: (editor: any) => {
+        // Captured for the cold-paint fallback effect above. Without an
+        // editor reference we cannot recover when CollaborationPlugin's
+        // bootstrap check declines to fire `initialEditorState`.
+        collabEditorInstanceRef.current = editor;
       },
     };
   }, [contentMode, collabConfig, collabLoading, contentLoaded, contentMarkdown, saveContent]);
@@ -856,6 +959,16 @@ export const TrackerItemDetail: React.FC<TrackerItemDetailProps> = ({
           </div>
         </div>
         <div className="flex items-center gap-1 shrink-0">
+          {teamOrgId && (
+            <button
+              className="p-1 rounded hover:bg-nim-tertiary text-nim-muted"
+              onClick={handleCopyLink}
+              title="Copy shareable link"
+              data-testid="tracker-copy-link"
+            >
+              <MaterialSymbol icon="link" size={18} />
+            </button>
+          )}
           {onArchive && (
             <button
               className="p-1 rounded hover:bg-nim-tertiary text-nim-muted"
