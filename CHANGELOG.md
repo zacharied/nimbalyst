@@ -41,6 +41,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Excalidraw "import mermaid" now registers the rendered diagram image, so it no longer shows as a broken thumbnail. (#428)
 - Codex sessions now append actionable guidance when `~/.codex/config.toml` has a url-based MCP server the bundled Codex rejects, instead of an opaque config-load failure. (#424)
 - Dollar signs in markdown no longer collapse currency text like `$7M ... $40M` as inline LaTeX math. (#447)
+- Trackers panel now refetches when switching projects in the sidebar rail instead of staying pinned to the workspace that was active at app startup. (#441)
 
 ## [0.61.1] - 2026-05-21
 
