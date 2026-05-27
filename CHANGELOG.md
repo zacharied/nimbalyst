@@ -30,6 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Blitz no longer silently dismisses the dialog when run against a workspace whose git repo has no commits. (#455)
 - Share to Team now seeds new shared extension documents into the collab room before publishing the link, so teammates no longer open blank MockupLM docs when they join immediately.
 - Re-uploading a shared MockupLM document now resolves the correct collab content adapter for `.mockup.html` and `.mockupproject` files.
+- Shared-document history now records bootstrap and manual revisions reliably; Cmd/Ctrl+S inside a collab editor creates a manual revision, and Restore waits for pending writes to settle before bailing on transient sync status.
 
 ### Removed
 <!-- Removed features go here -->
