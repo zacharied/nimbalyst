@@ -28,6 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 <!-- Bug fixes go here -->
+- Lexical selection-toolbar format dropdowns now render inside the editor root when portaled, so shared dropdown styling and theme backgrounds no longer disappear.
 - AskUserQuestion widget no longer goes blank (header-only "Waiting..." with no options) after switching from Agent mode to Files mode and back when the same session is open in both panels.
 - Mobile sync no longer wastes per-session storage on transient Codex app-server delta and diff-update events, preventing noisy sessions from tripping the 10 MB SessionRoom cap too early.
 - Codex app-server transcripts no longer duplicate commit proposal widgets or final messages when repeated item/turn notifications arrive.
