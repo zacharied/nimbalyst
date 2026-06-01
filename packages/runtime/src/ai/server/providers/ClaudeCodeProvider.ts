@@ -125,6 +125,16 @@ const SDK_NATIVE_TOOLS: readonly string[] = [
 ];
 
 /**
+ * Tools the CLI emits as tool_use but Nimbalyst services handle as a side effect
+ * inside this provider (see the `tool_use` switch). Their tool_result from the CLI
+ * is informational only -- routing them through `this.toolHandler` would throw
+ * "Unknown tool", so we treat them like SDK_NATIVE_TOOLS for the warn/route check.
+ */
+const NIMBALYST_HANDLED_TOOLS: readonly string[] = [
+  'ScheduleWakeup',
+];
+
+/**
  * Track changes in the agent-sdk and claude-code itself here:
  * https://github.com/anthropics/claude-agent-sdk-typescript/blob/main/CHANGELOG.md
  * https://github.com/anthropics/claude-code/blob/main/CHANGELOG.md
@@ -968,8 +978,9 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
                 }
 
                 const isSdkNativeTool = SDK_NATIVE_TOOLS.includes(toolName);
-                if (!toolName || isMcp || isSdkNativeTool || isSubagent) {
-                  // Handled by SDK or is a subagent spawn
+                const isNimbalystHandled = NIMBALYST_HANDLED_TOOLS.includes(toolName);
+                if (!toolName || isMcp || isSdkNativeTool || isNimbalystHandled || isSubagent) {
+                  // Handled by SDK, a subagent spawn, or a Nimbalyst side-effect handler above
                 } else if (this.toolHandler) {
                   // Unknown, non-MCP, non-whitelisted tool. Almost always means Anthropic
                   // added a new CLI-native tool we haven't added to SDK_NATIVE_TOOLS yet.
