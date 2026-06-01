@@ -16,6 +16,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - Fixed multi-minute beachball at startup for users with many shared trackers. The `document-sync:open` IPC now single-flights and caches the org-key-fingerprint HTTPS check per orgId (60s TTL) instead of firing one HTTPS call per opened document, and the tracker prewarm hook drops its limit from 50 to 10 and debounces 2s to avoid piling onto the restore wave.
+- Marketplace `.nimext` packages now include the `claude-plugin/` directory so installed extensions (slides, mindmap, etc.) can register their Claude skills instead of logging `Claude plugin path not found` and silently dropping the plugin.
+- `HistoryManager.getPendingFilesForSession` no longer throws `function json_extract(jsonb, unknown) does not exist` on PGLite installs. The query now picks `metadata->>'sessionId'` on PGLite and keeps `json_extract` on SQLite so the migration-2 index still matches.
 
 ### Removed
 <!-- Removed features go here -->
