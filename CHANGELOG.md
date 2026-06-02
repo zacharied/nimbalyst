@@ -20,6 +20,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Workstream parent sessions now bubble to the top of the left pane when a child session has new activity.
 - Interactive widgets (AskUserQuestion, ExitPlanMode, GitCommitProposal) render correctly when called via their MCP-prefixed tool names.
 - Workspace search no longer floods main.log with "ripgrep not found at" probe lines on every keystroke; the resolved binary path is cached per process.
+- Quick Open session dialog now returns instantly instead of stalling 12+ seconds and head-of-line-blocking other DB IPCs. Added a partial index on `ai_agent_messages(message_kind, created_at)` so the "list all user prompts" query no longer scans the whole table.
+- Historical user prompts (everything older than the searchable-text extractor's June 1 ship date) now show up in Quick Open. The AgentMessagesBackfill pass was silently aborting on its first UPDATE because the FTS5 AFTER UPDATE trigger ran `'delete'` with NULL content against an inconsistent shadow index and raised SQLITE_CORRUPT_VTAB. Migrations rebuild the FTS index and split the trigger into WHEN-guarded delete/insert halves so the 'delete' command only fires when there is a row in the index to delete.
 
 ### Removed
 <!-- Removed features go here -->
