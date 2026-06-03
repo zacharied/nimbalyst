@@ -16,10 +16,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 <!-- Bug fixes go here -->
-- AI Usage Report no longer crashes the app on the SQLite backend; the historical-usage query now filters Codex turns in SQL instead of loading every message body, and the database worker rejects oversized results instead of triggering a fatal out-of-memory abort.
-- Terminal scrollback no longer discards all saved history (and shows the "could not be restored cleanly" banner) over a single stray NUL byte; the restore notice also moves off the prompt line and auto-dismisses.
-- Claude Code session token totals are no longer inflated; cumulative input/output now come from Anthropic's deduplicated `result.usage` instead of the SDK's `modelUsage`, which double-counts duplicated assistant events.
-- Tracker tool widgets no longer crash with `typeTags.filter is not a function` on the SQLite backend, where the `type_tags` array column comes back as a JSON string instead of an array.
+
+### Removed
+<!-- Removed features go here -->
+
+## [0.64.4] - 2026-06-03
+
+
+### Added
+<!-- New features go here -->
+
+### Changed
+<!-- Changes to existing functionality go here -->
+
+### Fixed
+<!-- Bug fixes go here -->
+- AI Usage Report no longer crashes the app on the SQLite backend.
+- Terminal scrollback is preserved when it contains a stray NUL byte, instead of discarding all saved history.
+- Claude Code session token totals in the AI Usage Report are no longer inflated.
+- Tracker tool widgets no longer crash on the SQLite backend over a JSON-string `type_tags` column.
 
 ### Removed
 <!-- Removed features go here -->
