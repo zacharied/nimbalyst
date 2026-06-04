@@ -131,9 +131,9 @@ export function BrowserEditor({ host }: EditorHostProps): JSX.Element {
         <div
           style={{
             padding: 12,
-            border: '1px solid var(--nim-error-border, #c33)',
-            background: 'var(--nim-error-bg, rgba(204, 51, 51, 0.06))',
-            color: 'var(--nim-text, inherit)',
+            border: '1px solid var(--nim-error)',
+            background: 'color-mix(in srgb, var(--nim-error) 8%, var(--nim-bg))',
+            color: 'var(--nim-text)',
             borderRadius: 4,
           }}
         >

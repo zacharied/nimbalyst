@@ -4,7 +4,7 @@
   width: 100%;
   height: 100%;
   min-height: 0;
-  background: var(--nim-editor-bg, transparent);
+  background: var(--nim-bg);
 }
 
 .nim-browser-editor-error {
@@ -18,15 +18,15 @@
   align-items: center;
   gap: 6px;
   padding: 6px 8px;
-  border-bottom: 1px solid var(--nim-border, rgba(0, 0, 0, 0.1));
-  background: var(--nim-panel-bg, transparent);
+  border-bottom: 1px solid var(--nim-border);
+  background: var(--nim-bg-secondary);
   flex: 0 0 auto;
 }
 
 .nim-browser-toolbar-btn {
-  border: 1px solid var(--nim-border, rgba(0, 0, 0, 0.1));
-  background: var(--nim-button-bg, transparent);
-  color: var(--nim-text, inherit);
+  border: 1px solid var(--nim-border);
+  background: var(--nim-bg);
+  color: var(--nim-text);
   border-radius: 4px;
   cursor: pointer;
   font-size: 13px;
@@ -39,7 +39,7 @@
 }
 
 .nim-browser-toolbar-btn:hover:not(:disabled) {
-  background: var(--nim-button-hover-bg, rgba(0, 0, 0, 0.04));
+  background: var(--nim-bg-hover);
 }
 
 .nim-browser-url-input,

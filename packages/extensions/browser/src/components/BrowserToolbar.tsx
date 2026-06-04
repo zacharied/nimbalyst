@@ -80,8 +80,8 @@ export function BrowserToolbar({
         alignItems: 'center',
         gap: 6,
         padding: '6px 8px',
-        borderBottom: '1px solid var(--nim-border, rgba(0,0,0,0.1))',
-        background: 'var(--nim-panel-bg, transparent)',
+        borderBottom: '1px solid var(--nim-border)',
+        background: 'var(--nim-bg-secondary)',
       }}
     >
       <button
@@ -125,9 +125,9 @@ export function BrowserToolbar({
             flex: 1,
             minWidth: 0,
             padding: '4px 8px',
-            border: '1px solid var(--nim-border, rgba(0,0,0,0.1))',
+            border: '1px solid var(--nim-border)',
             borderRadius: 4,
-            color: 'var(--nim-text-secondary, #666)',
+            color: 'var(--nim-text-muted)',
             overflow: 'hidden',
             textOverflow: 'ellipsis',
             whiteSpace: 'nowrap',
@@ -157,10 +157,10 @@ export function BrowserToolbar({
             flex: 1,
             minWidth: 0,
             padding: '4px 8px',
-            border: '1px solid var(--nim-border, rgba(0,0,0,0.1))',
+            border: '1px solid var(--nim-border)',
             borderRadius: 4,
-            background: 'var(--nim-input-bg, white)',
-            color: 'var(--nim-text, inherit)',
+            background: 'var(--nim-bg)',
+            color: 'var(--nim-text)',
             outline: 'none',
           }}
           placeholder="Enter URL"
@@ -171,7 +171,7 @@ export function BrowserToolbar({
         <span
           className="nim-browser-loading"
           aria-hidden="true"
-          style={{ fontSize: 11, color: 'var(--nim-text-secondary, #666)' }}
+          style={{ fontSize: 11, color: 'var(--nim-text-muted)' }}
         >
           Loading&hellip;
         </span>

@@ -154,6 +154,7 @@ A concise reference of all features in the product. Keep this up to date as feat
 - File watching with auto-reload on external changes
 - .gitignore-aware filtering
 - New file dialog with type selection and folder picker
+- New browser tab (Cmd+Shift+B) -- opens a fileless Browser virtual tab in files mode
 - Quick open (Cmd+O)
 - Content search across files (Cmd+Shift+F)
 - Auto-save (configurable interval)

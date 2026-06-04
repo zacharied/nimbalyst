@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 <!-- New features go here -->
 - File paths mentioned in AI transcripts are now clickable links that open the file, even when the agent writes them as plain text or inline code.
+- New Browser Tab command in the File menu (Cmd+Shift+B) opens a browser virtual tab in files mode.
 
 ### Changed
 <!-- Changes to existing functionality go here -->
@@ -18,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 <!-- Bug fixes go here -->
+- Browser extension toolbar and URL bar now use the active theme's colors instead of rendering with a white URL box in dark mode.
 
 ### Removed
 <!-- Removed features go here -->
