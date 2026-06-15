@@ -25,7 +25,7 @@ import { ClaudeCliSessionLauncher } from './ClaudeCliSessionLauncher';
 import { HooklessAgentFileWatcher } from './HooklessAgentFileWatcher';
 import { resolveClaudeExecutablePath } from './claudeExecutableResolver';
 import { resolveClaudeCliSupportsPluginDir } from './claudeCliPluginSupport';
-import { getClaudePluginPaths } from '../../ipc/ExtensionHandlers';
+import { getAgentWorkflowService } from '../AgentWorkflowService';
 import { workspacePathToDir } from '../AttachmentService';
 import { resolveClaudePermissionHookScriptPath } from './claudeCliPermissionHookPath';
 import { getPermissionService } from '../PermissionService';
@@ -163,12 +163,18 @@ function buildLauncher(): ClaudeCliSessionLauncher {
     getPermissionMode: (workspacePath: string) =>
       getPermissionService().getPermissionMode(workspacePath),
     // NIM-845: load extension Claude-plugins so namespaced slash commands
-    // (`/feedback:bug-report`, …) resolve in CLI sessions. `getClaudePluginPaths`
-    // is the same single source of truth the SDK path uses; we map to the bare
-    // directory paths the CLI's `--plugin-dir` expects. Gated by the `--version`
-    // probe below so old CLIs (< 2.1.142, which reject the flag) silently skip it.
+    // (`/feedback:bug-report`, …) resolve in CLI sessions. Mirror the SDK path's
+    // loader EXACTLY (`getClaudeProviderPluginPaths`, the same aggregator wired at
+    // index.ts → setExtensionPluginsLoader): native + legacy + CLI-installed AND
+    // GENERATED extension-workflow plugins. The raw `getClaudePluginPaths` omits
+    // the generated ones, so a supported-CLI user would see generated namespaced
+    // commands in the picker that the launched CLI couldn't resolve. We map to the
+    // bare directory paths the CLI's `--plugin-dir` expects. Gated by the
+    // `--version` probe below so old CLIs that reject the flag silently skip it.
     loadPluginDirs: async (workspacePath: string) =>
-      (await getClaudePluginPaths(workspacePath)).map((plugin) => plugin.path),
+      (await getAgentWorkflowService(workspacePath).getClaudeProviderPluginPaths()).map(
+        (plugin) => plugin.path,
+      ),
     cliSupportsPluginDir: (executable: string) => resolveClaudeCliSupportsPluginDir(executable),
   });
 }

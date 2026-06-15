@@ -8,8 +8,15 @@
  * `claude-code-cli` session. Without it the launched binary has zero extension
  * plugins loaded and honestly reports `Unknown command`.
  *
- * The flag only exists on modern CLIs: it first shipped in **2.1.142** (official
- * Claude Code CHANGELOG; confirmed a documented top-level option on 2.1.177).
+ * The flag only exists on modern CLIs. Per the official Claude Code CHANGELOG the
+ * top-level `--plugin-dir` already existed and was being *modified* by 2.1.74
+ * ("local dev copies now override installed marketplace plugins") and 2.1.76
+ * ("use repeated `--plugin-dir` for multiple directories" — the exact repeated
+ * single-path form we emit). We gate at **2.1.76**: it's the earliest version
+ * whose documented arity matches our emission, well below the introduction. (The
+ * later 2.1.142 line in the changelog is the separate `claude agents` subcommand
+ * flag batch, NOT the top-level flag — don't be misled by it.) Confirmed present
+ * as a top-level option on 2.1.177; 1.0.72 has no plugin system at all.
  * Nimbalyst runs the user's OWN `claude` (see `claudeExecutableResolver.ts`) and
  * does not pin a version, so an older install may be resolved. On such a CLI
  * commander rejects `--plugin-dir` as an unknown option and the launch FAILS —
@@ -27,11 +34,12 @@
 import { execFileSync } from 'node:child_process';
 
 /**
- * Minimum `claude` version that accepts the top-level `--plugin-dir` flag.
- * Source: Claude Code CHANGELOG — `--plugin-dir` first listed under 2.1.142.
- * Empirically confirmed present on 2.1.177 and absent on 1.0.72.
+ * Minimum `claude` version we pass the top-level `--plugin-dir` flag to.
+ * Source: Claude Code CHANGELOG — 2.1.76 documents repeated single-path
+ * `--plugin-dir` (the form we emit); the flag itself predates it (modified at
+ * 2.1.74). Empirically confirmed present on 2.1.177 and absent on 1.0.72.
  */
-export const MIN_CLAUDE_CLI_VERSION_FOR_PLUGIN_DIR = '2.1.142';
+export const MIN_CLAUDE_CLI_VERSION_FOR_PLUGIN_DIR = '2.1.76';
 
 export interface ParsedClaudeVersion {
   major: number;

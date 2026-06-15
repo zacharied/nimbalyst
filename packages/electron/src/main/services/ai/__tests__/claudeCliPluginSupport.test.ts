@@ -31,15 +31,17 @@ describe('parseClaudeVersion', () => {
 });
 
 describe('claudeVersionOutputSupportsPluginDir', () => {
-  it('supports the floor version and anything newer', () => {
+  it('supports the floor version and anything newer (incl. 2.1.141 and the agents-flags 2.1.142)', () => {
     expect(claudeVersionOutputSupportsPluginDir(`${MIN_CLAUDE_CLI_VERSION_FOR_PLUGIN_DIR} (Claude Code)`)).toBe(true);
+    // The flag predates the 2.1.142 `claude agents` batch — 2.1.76..2.1.141 are supported too.
+    expect(claudeVersionOutputSupportsPluginDir('2.1.141 (Claude Code)')).toBe(true);
     expect(claudeVersionOutputSupportsPluginDir('2.1.177 (Claude Code)')).toBe(true);
     expect(claudeVersionOutputSupportsPluginDir('3.0.0 (Claude Code)')).toBe(true);
   });
 
-  it('does NOT support versions below the floor (the plugin system / flag is absent)', () => {
+  it('does NOT support versions below the floor (the documented repeated-flag arity is absent)', () => {
     expect(claudeVersionOutputSupportsPluginDir('1.0.72 (Claude Code)')).toBe(false);
-    expect(claudeVersionOutputSupportsPluginDir('2.1.141 (Claude Code)')).toBe(false);
+    expect(claudeVersionOutputSupportsPluginDir('2.1.75 (Claude Code)')).toBe(false);
     expect(claudeVersionOutputSupportsPluginDir('2.0.99 (Claude Code)')).toBe(false);
   });
 
