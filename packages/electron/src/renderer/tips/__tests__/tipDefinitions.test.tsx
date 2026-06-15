@@ -9,6 +9,7 @@ import { openSettingsCommandAtom } from '../../store/atoms/settingsNavigation';
 import { FEATURE_USAGE_KEYS, type FeatureUsageKey, type FeatureUsageRecord } from '../../../shared/featureUsage';
 import { tipCreateWorktreeSessionRequestAtom } from '../atoms';
 import { keyboardShortcutsTip } from '../definitions/keyboard-shortcuts';
+import { sessionCleanupTip } from '../definitions/session-cleanup';
 import { themeExploreTip } from '../definitions/theme-explore';
 import { trackerModeTip } from '../definitions/tracker-mode';
 import { worktreeSessionTip } from '../definitions/worktree-session';
@@ -163,5 +164,23 @@ describe('contextual tip definitions', () => {
 
     expect(store.get(windowModeAtom)).toBe('agent');
     expect(store.get(tipCreateWorktreeSessionRequestAtom)).toBe(1);
+  });
+
+  it('shows the session cleanup tip only once the board has accumulated many sessions', () => {
+    const fewSessions = createContext({
+      currentMode: 'agent',
+      featureUsage: createFeatureUsage({
+        [FEATURE_USAGE_KEYS.SESSION_CREATED]: 10,
+      }),
+    });
+    const manySessions = createContext({
+      currentMode: 'agent',
+      featureUsage: createFeatureUsage({
+        [FEATURE_USAGE_KEYS.SESSION_CREATED]: 20,
+      }),
+    });
+
+    expect(sessionCleanupTip.trigger.condition(fewSessions)).toBe(false);
+    expect(sessionCleanupTip.trigger.condition(manySessions)).toBe(true);
   });
 });

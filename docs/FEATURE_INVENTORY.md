@@ -68,6 +68,7 @@ A concise reference of all features in the product. Keep this up to date as feat
 - Collapsible columns
 - Configurable columns
 - Auto-exit kanban when navigating to a session
+- Agent-assisted cleanup (`/session-cleanup` slash command in the Planning extension) — audits sessions, proposes phase corrections and "mark complete" candidates for approval, and flags old sessions to archive
 
 ## Agent Mode
 
