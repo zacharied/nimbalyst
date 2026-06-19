@@ -1447,6 +1447,8 @@ export default function App() {
     editorModeRef,
     agentModeRef,
     toggleAgentCollapsed,
+    isFullscreenPanelActive,
+    exitFullscreenPanel: () => setActiveExtensionPanel(null),
   });
 
   // Extension-contributed keybindings (reads from manifests, fires commands via registry)
