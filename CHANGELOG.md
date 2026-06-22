@@ -9,10 +9,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+<!-- New features go here -->
+
+### Changed
+<!-- Changes to existing functionality go here -->
+
+### Fixed
+<!-- Bug fixes go here -->
+
+### Removed
+<!-- Removed features go here -->
+
+## [0.66.0] - 2026-06-22
+
+
+### Added
 - Custom completion sounds — pick your own audio file (MP3, WAV, OGG, M4A, AAC, FLAC) to play when an agent finishes a turn.
 <!-- New features go here -->
 - iOS: create a Meta Agent from the session create menu (alpha-gated to mirror the desktop `meta-agent` feature flag, synced to mobile).
 - New Gemini (Antigravity) marketplace extension, usable as an AI chat and meta-agent provider, with a usage indicator chip. (#558)
+- New RTL Support extension: auto-detects right-to-left languages (Arabic, Hebrew, Persian, etc.) and renders the transcript and input correctly, with a settings panel and toggle shortcut. (#638)
+- Real-time team document collaboration (alpha): share documents across editor types and edit them together live.
+- Org and project management (alpha): move a project between orgs and merge orgs with guided wizards, plus org-scoped settings.
 - `/session-cleanup` command (Planning extension) tidies your Sessions board: it proposes phase corrections and "mark complete" candidates for your approval, and flags old sessions to archive.
 - `nim`, a companion CLI for trackers: list, create, update, comment on, archive, and import tracker items from the terminal — through a running Nimbalyst, or directly against the database when the app is closed.
 - Link tracker items to one another with relationship fields: typeahead pills in the table and detail panel, plus automatic "Linked from" backlinks.
@@ -21,6 +39,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Edit and delete your own tracker comments.
 - Share individual plans (and other full-document trackers) with your team: the shared copy keeps its status, lifecycle, and body in sync — including changes made offline — and unsharing removes it for everyone, while unshared items stay private.
 - Control whether AI agents can use your trackers per project, with an "AI Agent Access" toggle in tracker settings.
+- Android app variant with email/magic-link sign-in, push notifications, deep links, and pairing QR scanner. (#663)
 
 ### Changed
 - Contextual tips now fill empty AI sessions immediately and on every empty session, instead of after a delay and only once per app launch.
@@ -49,6 +68,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - AI agents reading a tracker item now see its custom fields (such as a GitHub PR's number and author), which were previously omitted from the item's details.
 - Tracker types shared via team sync now persist across restarts (including synced overrides of built-in types), and synced tracker items no longer silently fail to save on some databases.
 - A session no longer gets stuck showing "awaiting user input" when an interactive prompt is abandoned (e.g. you send a new message instead of answering it).
+- Mode-switch keyboard shortcuts now work while a fullscreen extension panel is open — they exit the panel first.
 
 ### Removed
 <!-- Removed features go here -->
