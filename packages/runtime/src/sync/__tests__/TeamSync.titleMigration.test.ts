@@ -1,21 +1,21 @@
 /**
  * Doc-index TITLE read path across the legacy-e2e -> server-managed migration
- * (NIM-906).
+ * (NIM-906 / NIM-910).
  *
- * Mirrors DocumentSync.serverManagedMigration.test.ts but for the TeamRoom
- * doc-index titles. When a team migrates, title rows written before the flip
- * stay AES-ciphertext on the server (the TeamRoom passes them through with
- * their original non-empty iv; only DEK-fingerprinted rows are server-decrypted
- * to plaintext with an empty-iv sentinel). The client must:
+ * When a team migrates, title rows written before the flip stay AES-ciphertext
+ * on the server (the TeamRoom passes them through with their original non-empty
+ * iv; only DEK-fingerprinted rows are server-decrypted to plaintext with an
+ * empty-iv sentinel). The org key may also have been ROTATED while the team was
+ * legacy-e2e, so titles can span multiple org-key EPOCHS. The client must:
  *   - pass through rows with an empty iv (server plaintext),
- *   - AES-decrypt rows with a non-empty iv using the retained legacy org key,
- *   - surface a row it cannot decrypt as `decryptFailed` (locked), never as raw
- *     base64, and never blanking the rest of the list,
- *   - and a client that DOES hold the legacy key can re-register the recovered
- *     titles as plaintext (backfill) so the server re-keys them under the DEK.
+ *   - AES-decrypt rows with a non-empty iv by trying EACH retained epoch key,
+ *   - surface a row no epoch can decrypt as `decryptFailed` (locked), never as
+ *     raw base64, and never blanking the rest of the list,
+ *   - and a client that can decrypt re-registers titles as plaintext (backfill)
+ *     AND verifies the writes persisted server-side (not just that they sent).
  */
 
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { TeamSyncProvider } from '../TeamSync';
 import type { TeamSyncConfig } from '../teamSyncTypes';
 
@@ -33,7 +33,7 @@ async function wireEncryptTitle(title: string, key: CryptoKey): Promise<{ encryp
   };
 }
 
-function serverManagedProvider(legacyOrgKey?: CryptoKey): TeamSyncProvider {
+function serverManagedProvider(legacyOrgKeys?: CryptoKey[]): TeamSyncProvider {
   const config: TeamSyncConfig = {
     serverUrl: 'ws://example.test',
     getJwt: async () => 'token',
@@ -41,7 +41,7 @@ function serverManagedProvider(legacyOrgKey?: CryptoKey): TeamSyncProvider {
     userId: 'user-1',
     keyCustody: 'server-managed',
     orgKeyFingerprint: null,
-    legacyOrgKey,
+    legacyOrgKeys,
   };
   return new TeamSyncProvider(config);
 }
@@ -67,29 +67,30 @@ describe('TeamSync doc-index title server-managed migration read path', () => {
     provider.destroy();
   });
 
-  it('AES-decrypts legacy ciphertext titles (non-empty iv) with the legacy org key', async () => {
-    const legacyKey = await createAesKey();
-    const provider = serverManagedProvider(legacyKey);
-    const { encryptedTitle, titleIv } = await wireEncryptTitle('Folder/Real Doc', legacyKey);
-    expect(titleIv).not.toBe('');
+  it('decrypts a legacy title by trying each org-key epoch (rotation support)', async () => {
+    const wrongKey = await createAesKey();
+    const rightKey = await createAesKey();
+    // Title encrypted under the SECOND epoch; the wrong (current) key is tried first.
+    const provider = serverManagedProvider([wrongKey, rightKey]);
+    const { encryptedTitle, titleIv } = await wireEncryptTitle('Folder/Real Doc', rightKey);
     const entry = await (provider as any).decryptEntry(encEntry('doc-2', encryptedTitle, titleIv));
     expect(entry.title).toBe('Folder/Real Doc');
     expect(entry.decryptFailed).toBeFalsy();
     provider.destroy();
   });
 
-  it('throws (so the caller marks it locked) on a legacy title when no legacy key is available', async () => {
-    const provider = serverManagedProvider(/* no legacy key */);
-    const legacyKey = await createAesKey();
-    const { encryptedTitle, titleIv } = await wireEncryptTitle('secret', legacyKey);
+  it('throws (so the caller marks it locked) when NO epoch can decrypt', async () => {
+    const onlyKey = await createAesKey();
+    const otherKey = await createAesKey();
+    const provider = serverManagedProvider([onlyKey]); // does not hold the encrypting key
+    const { encryptedTitle, titleIv } = await wireEncryptTitle('secret', otherKey);
     await expect((provider as any).decryptEntry(encEntry('doc-3', encryptedTitle, titleIv))).rejects.toThrow();
     provider.destroy();
   });
 
   it('marks an undecryptable legacy title as decryptFailed without raw base64 or blanking siblings', async () => {
-    const legacyKey = await createAesKey();
     const otherKey = await createAesKey();
-    const provider = serverManagedProvider(/* no legacy key -> legacy row unreadable */);
+    const provider = serverManagedProvider([await createAesKey()]); // wrong epoch only
 
     const legacy = await wireEncryptTitle('unreadable', otherKey);
     const docs = await (provider as any).decryptDocuments([
@@ -102,21 +103,32 @@ describe('TeamSync doc-index title server-managed migration read path', () => {
     expect(plain.title).toBe('Visible Plain');
     expect(plain.decryptFailed).toBeFalsy();
     expect(locked.decryptFailed).toBe(true);
-    // Never the raw ciphertext as a title.
-    expect(locked.title).not.toBe(legacy.encryptedTitle);
-    expect(legacyKey).toBeDefined();
+    expect(locked.title).not.toBe(legacy.encryptedTitle); // never the raw ciphertext
     provider.destroy();
   });
 
-  it('self-heals recovered legacy titles on load, re-registering them as PLAINTEXT (empty iv)', async () => {
-    const legacyKey = await createAesKey();
-    const provider = serverManagedProvider(legacyKey);
-    const sent: any[] = [];
-    (provider as any).send = (msg: any) => { sent.push(msg); };
+  it('backfill re-registers recovered titles as PLAINTEXT and CONFIRMS server persistence', async () => {
+    const key = await createAesKey();
+    const provider = serverManagedProvider([key]);
+    (provider as any).legacyTitleBackfillRan = true; // disable the fire-and-forget auto-heal race
 
-    const legacy = await wireEncryptTitle('Notes/Recovered', legacyKey);
-    // Load a mixed index: one already-plaintext, one legacy ciphertext. The
-    // load path's one-shot auto self-heal fires for the legacy row.
+    const sent: any[] = [];
+    (provider as any).send = (msg: any) => {
+      sent.push(msg);
+      // Simulate the server: on the verification re-sync, report the
+      // re-registered doc as server-plaintext (empty iv) => persisted.
+      if (msg.type === 'teamSync') {
+        void (provider as any).handleTeamSyncResponse({
+          type: 'teamSyncResponse',
+          team: { metadata: null, members: [], documents: [
+            encEntry('plain-1', 'Already Plain', ''),
+            encEntry('legacy-1', 'Notes/Recovered', ''), // now plaintext on the server
+          ], keyEnvelope: null },
+        });
+      }
+    };
+
+    const legacy = await wireEncryptTitle('Notes/Recovered', key);
     await (provider as any).handleDocIndexSyncResponse({
       type: 'docIndexSyncResponse',
       documents: [
@@ -124,18 +136,50 @@ describe('TeamSync doc-index title server-managed migration read path', () => {
         encEntry('legacy-1', legacy.encryptedTitle, legacy.titleIv),
       ],
     });
-    // Let the fire-and-forget auto self-heal settle.
-    await new Promise((r) => setTimeout(r, 0));
+
+    const res = await provider.backfillLegacyTitles();
+    expect(res.sent).toBe(1);
+    expect(res.confirmed).toBe(1);
 
     const updates = sent.filter((m) => m.type === 'docIndexUpdate');
     expect(updates).toHaveLength(1);
     expect(updates[0].documentId).toBe('legacy-1');
     expect(updates[0].encryptedTitle).toBe('Notes/Recovered'); // plaintext
     expect(updates[0].titleIv).toBe(''); // empty-iv sentinel => server DEK-encrypts at rest
+    provider.destroy();
+  });
 
-    // Idempotent: an explicit re-run is now a no-op (work already claimed).
-    expect(await provider.backfillLegacyTitles()).toBe(0);
-    expect(sent.filter((m) => m.type === 'docIndexUpdate')).toHaveLength(1);
+  it('backfill re-queues writes the server did NOT persist (e.g. rotation lock)', async () => {
+    const key = await createAesKey();
+    const provider = serverManagedProvider([key]);
+    (provider as any).legacyTitleBackfillRan = true;
+
+    const sent: any[] = [];
+    const legacy = await wireEncryptTitle('Notes/Stuck', key);
+    (provider as any).send = (msg: any) => {
+      sent.push(msg);
+      // Simulate the server REJECTING the write (rotation lock): the re-sync
+      // still reports the row as legacy ciphertext (non-empty iv).
+      if (msg.type === 'teamSync') {
+        void (provider as any).handleTeamSyncResponse({
+          type: 'teamSyncResponse',
+          team: { metadata: null, members: [], documents: [
+            encEntry('legacy-1', legacy.encryptedTitle, legacy.titleIv),
+          ], keyEnvelope: null },
+        });
+      }
+    };
+
+    await (provider as any).handleDocIndexSyncResponse({
+      type: 'docIndexSyncResponse',
+      documents: [encEntry('legacy-1', legacy.encryptedTitle, legacy.titleIv)],
+    });
+
+    const res = await provider.backfillLegacyTitles();
+    expect(res.sent).toBe(1);
+    expect(res.confirmed).toBe(0); // not persisted
+    // Unconfirmed doc is re-queued for a later retry.
+    expect((provider as any).legacyTitleDocIds.has('legacy-1')).toBe(true);
     provider.destroy();
   });
 });

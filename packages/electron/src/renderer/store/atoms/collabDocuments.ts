@@ -349,7 +349,7 @@ export async function initSharedDocuments(workspacePath: string, retryCount = 0)
     }
 
     store.set(workspaceHasTeamAtomFamily(workspacePath), true);
-    const { orgId, teamProjectId, keyCustody, orgKeyBase64, legacyOrgKeyBase64, orgKeyFingerprint, serverUrl, userId, personalOrgId } = result.config;
+    const { orgId, teamProjectId, keyCustody, orgKeyBase64, legacyOrgKeysBase64, orgKeyFingerprint, serverUrl, userId, personalOrgId } = result.config;
     store.set(teamOrgIdAtomFamily(workspacePath), orgId);
 
     const { TeamSyncProvider } = await import('@nimbalyst/runtime/sync');
@@ -368,18 +368,26 @@ export async function initSharedDocuments(workspacePath: string, retryCount = 0)
           ['encrypt', 'decrypt']
         );
 
-    // NIM-906: in server-managed mode, import the retained legacy org key (when
-    // available) so the provider can read and self-heal PRE-MIGRATION ciphertext
-    // titles. Absent it, such titles render as locked entries, never raw base64.
-    const legacyOrgKey = serverManaged && legacyOrgKeyBase64
-      ? await crypto.subtle.importKey(
-          'raw',
-          Uint8Array.from(atob(legacyOrgKeyBase64), c => c.charCodeAt(0)),
-          { name: 'AES-GCM', length: 256 },
-          false,
-          ['encrypt', 'decrypt']
-        )
-      : undefined;
+    // NIM-906/910: in server-managed mode, import every retained legacy org-key
+    // EPOCH (current + archived) so the provider can read and self-heal
+    // PRE-MIGRATION ciphertext titles even when the org key was rotated and
+    // titles span epochs. Absent any, such titles render as locked entries,
+    // never raw base64.
+    const legacyOrgKeys: CryptoKey[] = [];
+    if (serverManaged && Array.isArray(legacyOrgKeysBase64)) {
+      for (const b64 of legacyOrgKeysBase64) {
+        if (!b64) continue;
+        legacyOrgKeys.push(
+          await crypto.subtle.importKey(
+            'raw',
+            Uint8Array.from(atob(b64), c => c.charCodeAt(0)),
+            { name: 'AES-GCM', length: 256 },
+            false,
+            ['encrypt', 'decrypt']
+          )
+        );
+      }
+    }
 
     const provider = new TeamSyncProvider({
       serverUrl,
@@ -394,7 +402,7 @@ export async function initSharedDocuments(workspacePath: string, retryCount = 0)
       personalOrgId,
       keyCustody: serverManaged ? 'server-managed' : 'legacy-e2e',
       encryptionKey,
-      legacyOrgKey,
+      legacyOrgKeys,
       orgKeyFingerprint,
       getJwt: async () => {
         const jwtResult = await window.electronAPI.documentSync.getJwt(orgId);

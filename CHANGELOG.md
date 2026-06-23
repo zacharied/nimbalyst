@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 <!-- New features go here -->
+- Team admins can re-share the current encryption key with all members from Settings → Security & encryption, fixing teammates who saw "Encrypted document (key unavailable)".
 
 ### Changed
 <!-- Changes to existing functionality go here -->
@@ -17,7 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 <!-- Bug fixes go here -->
 - Extension AI tools (such as OpenSCAD and Replicad) no longer revert your recent file edits by saving stale editor content over them.
-- Shared document names no longer show as scrambled text after a team turns on managed encryption; existing names are recovered automatically.
+- Shared document names no longer show as scrambled text after a team turns on managed encryption, and are recovered even when the team's encryption key was rotated.
 
 ### Removed
 <!-- Removed features go here -->
