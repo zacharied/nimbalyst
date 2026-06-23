@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 <!-- Bug fixes go here -->
+- Extension AI tools (such as OpenSCAD and Replicad) no longer revert your recent file edits by saving stale editor content over them.
 - Shared document names no longer show as scrambled text after a team turns on managed encryption; existing names are recovered automatically.
 
 ### Removed
