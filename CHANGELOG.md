@@ -13,9 +13,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Extensions can now contribute tools and session context to the voice agent.
 - Search box on the Installed Extensions settings pane to filter the list.
 - Optional "Shared" column in the tracker table shows whether each item is shared with the team or local-only.
+- Database Browser maintenance action to reclaim space used by old Claude Code sessions, with an optional compaction step.
 
 ### Changed
-<!-- Changes to existing functionality go here -->
+- Claude Code sessions store and sync far less redundant data (no more full original-file copies on every edit), shrinking the local database and mobile transfers.
 
 ### Fixed
 - Stop prompting to run the Gemini backend at startup; it now starts only when you actually use Gemini.
