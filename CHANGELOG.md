@@ -35,6 +35,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed tracker field corruption on the SQLite backend caused by merging JSON updates.
 - Shared documents no longer get stuck on a blank "Offline – unsynced changes" editor when a session token was scoped to the wrong org.
 - Shared document bodies written before a team's encryption-key rotation now decrypt and load instead of opening blank.
+- Shared documents whose name contains spaces or other special characters now open instead of failing to sync.
 - Committing no longer triggers a burst of slow database queries that briefly hitched the app.
 - Excalidraw drawings shared with the team no longer open blank or render with a light canvas in dark mode.
 
