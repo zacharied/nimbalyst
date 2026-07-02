@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 <!-- Bug fixes go here -->
+- Fixed agent calls to background tools (Monitor and other deferred tools) failing with schema validation errors, and made a user-configured ENABLE_TOOL_SEARCH setting actually take effect.
 
 ### Removed
 <!-- Removed features go here -->
