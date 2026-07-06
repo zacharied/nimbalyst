@@ -20,6 +20,19 @@ export interface LinkedCommit {
   timestamp: string;
 }
 
+/**
+ * Explicit link from a tracker item to a pull request, written by the PR
+ * view's "Link tracker item" action (or agent tooling). Complements the
+ * zero-config path where any url-type field matching a PR URL counts as a
+ * reference (see plugins/TrackerPlugin/prReferences.ts).
+ */
+export interface LinkedPullRequest {
+  /** GitHub remote as "owner/repo" (lowercase). */
+  remote: string;
+  number: number;
+  url?: string;
+}
+
 export interface TrackerRecordSystem {
   workspace: string;
   documentPath?: string;
@@ -33,6 +46,7 @@ export interface TrackerRecordSystem {
   linkedSessions?: string[];
   linkedCommitSha?: string;
   linkedCommits?: LinkedCommit[];
+  linkedPullRequests?: LinkedPullRequest[];
   documentId?: string;
   activity?: TrackerActivity[];
   comments?: TrackerComment[];
@@ -66,6 +80,7 @@ const SYSTEM_KEYS = new Set([
   'linkedSessions',
   'linkedCommitSha',
   'linkedCommits',
+  'linkedPullRequests',
   'documentId',
   'activity',
   'comments',
@@ -303,6 +318,7 @@ export function dbRowToRecord(row: any): TrackerRecord {
       linkedSessions: data.linkedSessions || undefined,
       linkedCommitSha: data.linkedCommitSha || undefined,
       linkedCommits: data.linkedCommits || undefined,
+      linkedPullRequests: data.linkedPullRequests || undefined,
       documentId: data.documentId || undefined,
       activity: data.activity || undefined,
       comments: data.comments || undefined,
@@ -342,6 +358,7 @@ export function recordToDbParams(record: TrackerRecord): {
   if (record.system.linkedSessions?.length) data.linkedSessions = record.system.linkedSessions;
   if (record.system.linkedCommitSha) data.linkedCommitSha = record.system.linkedCommitSha;
   if (record.system.linkedCommits?.length) data.linkedCommits = record.system.linkedCommits;
+  if (record.system.linkedPullRequests?.length) data.linkedPullRequests = record.system.linkedPullRequests;
   if (record.system.documentId) data.documentId = record.system.documentId;
   if (record.system.activity?.length) data.activity = record.system.activity;
   if (record.system.comments?.length) data.comments = record.system.comments;

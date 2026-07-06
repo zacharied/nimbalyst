@@ -146,6 +146,17 @@ A concise reference of all features in the product. Keep this up to date as feat
 - Git ref watcher (detects external git operations)
 - Gitignore-aware file watching
 
+### Pull Request Review Mode
+
+- Integrated GitHub PR view (Cmd+U, developer mode + GitHub remote): list, conversation, files-changed diffs, commits, checks
+- Approve and merge (squash/merge/rebase) from inside the app; `gh` CLI auth, no stored tokens
+- Open a PR in a git worktree with an agent session on its head branch
+- Tracker integration (reference-based, works with any tracker type): status badge + priority marker on list rows, editable status pill and tracker chips in the detail header, dynamic review-status filter chips
+- Jump PR ↔ tracker item ↔ review session in one click from any of the three surfaces
+- Link any tracker item to a PR from the PR detail; opening a worktree auto-links the session to referencing items
+- Merging transitions referencing tracker items via the opt-in `prMergedStatus` schema role (comment-only for types without it); externally merged PRs surface a one-click catch-up hint
+- Tracker kanban cards show an item's external identity (e.g. PR number) via the `externalKey` schema role
+
 ## File Management
 
 - File tree with expand/collapse and keyboard navigation

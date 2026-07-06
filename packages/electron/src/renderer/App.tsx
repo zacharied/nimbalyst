@@ -195,6 +195,7 @@ import {
   initTrackerPanelLayout,
   trackerModeLayoutAtom,
 } from './store/atoms/trackers';
+import { prNavigateRequestAtom } from './store/atoms/pullRequests';
 import {
   terminalPanelVisibleAtom,
   terminalPanelHeightAtom,
@@ -1493,6 +1494,25 @@ export default function App() {
 
     window.addEventListener('nimbalyst:navigate-tracker-item', handleNavigateTrackerItem);
     return () => window.removeEventListener('nimbalyst:navigate-tracker-item', handleNavigateTrackerItem);
+  }, [setActiveMode]);
+
+  // Listen for PR navigation events (from tracker detail / session panels) —
+  // the PR-view leg of the PR ↔ tracker ↔ session navigation triangle.
+  useEffect(() => {
+    const handleNavigatePr = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (typeof detail?.remote === 'string' && typeof detail?.prNumber === 'number') {
+        setActiveMode('pr-review');
+        store.set(prNavigateRequestAtom, {
+          remote: detail.remote,
+          prNumber: detail.prNumber,
+          version: detail.version ?? Date.now(),
+        });
+      }
+    };
+
+    window.addEventListener('nimbalyst:navigate-pr', handleNavigatePr);
+    return () => window.removeEventListener('nimbalyst:navigate-pr', handleNavigatePr);
   }, [setActiveMode]);
 
   // Host hook for converting a legacy inline tracker embed into a real tracked
