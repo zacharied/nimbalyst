@@ -263,6 +263,10 @@ export function trackerRecordToItem(record: TrackerRecord): TrackerItem {
  */
 export function dbRowToRecord(row: any): TrackerRecord {
   const data = typeof row.data === 'string' ? JSON.parse(row.data) : row.data || {};
+  const nestedCustomFields =
+    data.customFields && typeof data.customFields === 'object' && !Array.isArray(data.customFields)
+      ? data.customFields as Record<string, unknown>
+      : undefined;
 
   // type_tags is TEXT[] in PGLite (returns string[]) but TEXT in SQLite (returns a
   // JSON-encoded string). Parse the SQLite shape back into an array, otherwise a raw
@@ -293,6 +297,17 @@ export function dbRowToRecord(row: any): TrackerRecord {
       fields[key] = value;
     }
   }
+  if (nestedCustomFields) {
+    for (const [key, value] of Object.entries(nestedCustomFields)) {
+      if (NON_FIELD_KEYS.has(key) || SYSTEM_KEYS.has(key)) continue;
+      if (value !== undefined) {
+        fields[key] = value;
+      }
+    }
+  }
+
+  const systemValue = (key: string): unknown =>
+    data[key] !== undefined ? data[key] : nestedCustomFields?.[key];
 
   return {
     id: row.id,
@@ -312,17 +327,17 @@ export function dbRowToRecord(row: any): TrackerRecord {
       createdAt: data.created || (row.created ? new Date(row.created).toISOString() : new Date().toISOString()),
       updatedAt: data.updated || (row.updated ? new Date(row.updated).toISOString() : new Date().toISOString()),
       lastIndexed: row.last_indexed ? new Date(row.last_indexed).toISOString() : undefined,
-      authorIdentity: data.authorIdentity || undefined,
-      lastModifiedBy: data.lastModifiedBy || undefined,
-      createdByAgent: data.createdByAgent || false,
-      linkedSessions: data.linkedSessions || undefined,
-      linkedCommitSha: data.linkedCommitSha || undefined,
-      linkedCommits: data.linkedCommits || undefined,
-      linkedPullRequests: data.linkedPullRequests || undefined,
-      documentId: data.documentId || undefined,
-      activity: data.activity || undefined,
-      comments: data.comments || undefined,
-      origin: data.origin || undefined,
+      authorIdentity: systemValue('authorIdentity') as TrackerIdentity | null | undefined,
+      lastModifiedBy: systemValue('lastModifiedBy') as TrackerIdentity | null | undefined,
+      createdByAgent: (systemValue('createdByAgent') as boolean | undefined) || false,
+      linkedSessions: systemValue('linkedSessions') as string[] | undefined,
+      linkedCommitSha: systemValue('linkedCommitSha') as string | undefined,
+      linkedCommits: systemValue('linkedCommits') as LinkedCommit[] | undefined,
+      linkedPullRequests: systemValue('linkedPullRequests') as LinkedPullRequest[] | undefined,
+      documentId: systemValue('documentId') as string | undefined,
+      activity: systemValue('activity') as TrackerActivity[] | undefined,
+      comments: systemValue('comments') as TrackerComment[] | undefined,
+      origin: systemValue('origin') as TrackerOrigin | undefined,
     },
     fields,
   };

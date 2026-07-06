@@ -79,8 +79,17 @@ export function PullRequestSidebar({
         }
       }
     }
+    for (const status of activeTrackerStatusFilters) {
+      if (!chips.has(status)) {
+        chips.set(status, {
+          value: status,
+          label: status,
+          count: 0,
+        });
+      }
+    }
     return Array.from(chips.values());
-  }, [prList, trackerReferences]);
+  }, [activeTrackerStatusFilters, prList, trackerReferences]);
 
   return (
     <div

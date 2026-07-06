@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { parsePrUrl, buildPrUrl, getRecordPrReferences } from '../prReferences';
+import { dbRowToRecord } from '../../../core/TrackerRecord';
 import type { TrackerRecord } from '../../../core/TrackerRecord';
 
 function makeRecord(fields: Record<string, unknown>, system: Partial<TrackerRecord['system']> = {}): TrackerRecord {
@@ -94,5 +95,24 @@ describe('getRecordPrReferences', () => {
       { linkedPullRequests: [{ remote: 42, number: 'x' } as never] },
     );
     expect(getRecordPrReferences(record)).toEqual([]);
+  });
+
+  it('finds PR URLs after dbRowToRecord lifts nested customFields', () => {
+    const record = dbRowToRecord({
+      id: 'tk_nested',
+      type: 'github-pr',
+      workspace: '/tmp/ws',
+      data: {
+        title: 'Nested PR',
+        customFields: {
+          prUrl: { url: 'https://github.com/a/b/pull/11', label: '#11' },
+        },
+      },
+      created: '2026-07-06T00:00:00.000Z',
+      updated: '2026-07-06T00:00:00.000Z',
+    });
+
+    expect(record.fields.prUrl).toEqual({ url: 'https://github.com/a/b/pull/11', label: '#11' });
+    expect(getRecordPrReferences(record)).toEqual([{ remote: 'a/b', number: 11 }]);
   });
 });
