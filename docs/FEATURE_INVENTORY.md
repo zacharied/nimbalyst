@@ -249,7 +249,10 @@ A concise reference of all features in the product. Keep this up to date as feat
 - Move a project to another organization — relocates its trackers, documents, history, and schemas into the destination, transfers member access by email (auto-invite for members not yet in the destination, with a per-person opt-out and seat-delta preview), and redirects the old location (server-managed orgs only)
 - Merge one organization into another — consolidates every project, unions the rosters (higher role wins), and optionally deletes the drained org
 - Shared document list
-- Unread indicators on shared docs — a dot on a doc's sidebar entry when it is new or its content/title changed (by someone else) since you last opened it; clears when you open it; the doc index carries the last writer so your own edits (including cross-device) are suppressed
+- Shared Docs discovery home — a center-pane hub (full-bleed empty state, or an overlay reachable via the sidebar Home button while docs are open) with title search, Favorites, Recently opened, and a New & Changed section that classifies unread docs as "New" (never opened) vs "Updated" (changed since you last viewed), plus a sortable full list
+- Favorite shared docs — star a doc from the hub or sidebar (local per-user); powers a Favorites hub section and a sidebar filter
+- Shared Docs sidebar filter — segmented All / Favorites / Updated view over the doc tree (persisted per workspace)
+- Unread indicators on shared docs — a dot on a doc's sidebar entry when it is new or its content/title changed (by someone else) since you last opened it; clears when you open it; the doc index carries the last writer so your own edits (including cross-device) are suppressed. The sidebar overflow menu can hide the dots or mark all docs read, and a doc's context menu can mark just that one read
 - Key envelope distribution for new members
 - Durable Objects per entity (session, document, tracker, team, index)
 - **Extension-provided collab editors** — SDK `useCollaborativeEditor` hook lets any extension (Excalidraw, CSV spreadsheet, DatamodelLM shipped; others can opt in via `collaboration.supported` manifest flag) share its file type to team with real-time multi-client editing, cursors, and selection
