@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 <!-- New features go here -->
 - OpenCode presets now include GLM 5.2 through the Z.AI and Z.AI Coding Plan providers.
-- GPT-5.6 is available in the OpenAI and Codex model pickers and is now the default OpenAI model.
+- GPT-5.6 (Sol, Terra, and Luna) is available for the OpenAI and Codex agents, with Sol as the new default.
 
 ### Changed
 - Any extension can now enable a native-code backend module, approved once via a single consent prompt instead of an allowlist or a per-workspace dialog.
