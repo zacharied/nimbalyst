@@ -11,6 +11,11 @@ export function normalizeFilePath(filePath: string): string {
   return filePath.replace(/[\\/]+/g, '/');
 }
 
+export function getFilePathBasename(filePath: string): string {
+  const normalizedPath = normalizeFilePath(filePath);
+  return normalizedPath.slice(normalizedPath.lastIndexOf('/') + 1);
+}
+
 /**
  * Return a forward-slash path relative to the workspace when the file is inside it.
  * Windows drive paths are compared case-insensitively to match filesystem behavior.

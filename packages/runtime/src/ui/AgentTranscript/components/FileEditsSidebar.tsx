@@ -7,7 +7,7 @@ import {
   getFileDirectoryPaths,
   getWorkspaceRelativeFilePath,
   type FileDirectoryNode,
-} from '../utils/fileDirectoryTree';
+} from '@nimbalyst/extension-sdk/file-tree';
 
 interface FileEditsSidebarProps {
   fileEdits: FileEditSummary[];

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildFileDirectoryTree,
   getFileDirectoryPaths,
+  getFilePathBasename,
   getWorkspaceRelativeFilePath,
 } from '../fileDirectoryTree';
 
@@ -16,29 +17,28 @@ const buildTree = (files: string[], workspacePath?: string) =>
     workspacePath,
   );
 
-describe('getWorkspaceRelativeFilePath', () => {
+describe('file path helpers', () => {
   it('normalizes Unix, Windows, and mixed separators', () => {
     expect(getWorkspaceRelativeFilePath('/repo/src/App.tsx', '/repo')).toBe('src/App.tsx');
-    expect(getWorkspaceRelativeFilePath(
-      'C:\\repo\\src\\App.tsx',
-      'C:\\repo',
-    )).toBe('src/App.tsx');
-    expect(getWorkspaceRelativeFilePath(
-      'C:\\repo/src\\App.tsx',
-      'C:\\repo\\',
-    )).toBe('src/App.tsx');
+    expect(getWorkspaceRelativeFilePath('C:\\repo\\src\\App.tsx', 'C:\\repo'))
+      .toBe('src/App.tsx');
+    expect(getWorkspaceRelativeFilePath('C:\\repo/src\\App.tsx', 'C:\\repo\\'))
+      .toBe('src/App.tsx');
   });
 
   it('compares Windows drive paths case-insensitively', () => {
-    expect(getWorkspaceRelativeFilePath(
-      'c:\\Repo\\src\\App.tsx',
-      'C:\\repo',
-    )).toBe('src/App.tsx');
+    expect(getWorkspaceRelativeFilePath('c:\\Repo\\src\\App.tsx', 'C:\\repo'))
+      .toBe('src/App.tsx');
   });
 
   it('does not strip a partial workspace prefix', () => {
     expect(getWorkspaceRelativeFilePath('/repo-copy/src/App.tsx', '/repo'))
       .toBe('/repo-copy/src/App.tsx');
+  });
+
+  it('gets basenames from Unix and Windows paths', () => {
+    expect(getFilePathBasename('packages/runtime/index.ts')).toBe('index.ts');
+    expect(getFilePathBasename('packages\\runtime\\index.ts')).toBe('index.ts');
   });
 });
 
@@ -56,6 +56,16 @@ describe('buildFileDirectoryTree', () => {
     expect(getFileDirectoryPaths(tree)).toEqual(['skills', 'skills/one', 'skills/two']);
     expect(tree.fileCount).toBe(3);
     expect(tree.subdirectories.get('skills')?.fileCount).toBe(2);
+  });
+
+  it('groups workspace-relative Windows paths for commit proposals', () => {
+    const tree = buildTree([
+      'packages\\runtime\\SKILL.md',
+      'packages\\electron\\SKILL.md',
+    ]);
+
+    expect(tree.displayPath).toBe('packages');
+    expect(getFileDirectoryPaths(tree)).toEqual(['packages', 'packages/runtime', 'packages/electron']);
   });
 
   it('collapses a single-child Unix directory chain', () => {

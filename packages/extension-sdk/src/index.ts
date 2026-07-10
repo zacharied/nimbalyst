@@ -73,6 +73,16 @@ export {
 // Re-export clipboard utilities
 export { copyToClipboard, readClipboard } from './clipboard.js';
 
+// Re-export cross-platform file tree utilities for host and extension UIs.
+export {
+  buildFileDirectoryTree,
+  getFileDirectoryPaths,
+  getFilePathBasename,
+  getWorkspaceRelativeFilePath,
+  normalizeFilePath,
+  type FileDirectoryNode,
+} from './fileDirectoryTree.js';
+
 // Re-export validation
 export {
   validateExtensionBundle,
