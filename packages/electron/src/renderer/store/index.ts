@@ -75,6 +75,10 @@ export {
   sessionPendingPromptAtom,
   sessionWakeupAtom,
   sessionHasPendingInteractivePromptAtom,
+  agentSessionAttentionAtom,
+  agentBubbleStateAtom,
+  type AgentBubbleColor,
+  type AgentSessionAttentionGroups,
   // Durable interactive prompts (DB-derived) - used for pending indicator
   sessionPendingPromptsAtom,
   refreshPendingPromptsAtom,
@@ -477,18 +481,3 @@ export {
   clearVoiceActiveSession,
   persistAndClearVoiceSession,
 } from './listeners/voiceModeListeners';
-
-// Background task atoms (dev-only tracker shell)
-export {
-  backgroundTaskSyncStatusAtom,
-  backgroundTaskAiTasksAtom,
-  backgroundTaskSyncTaskAtom,
-  backgroundTasksAtom,
-  backgroundTasksByCategoryAtom,
-  backgroundTaskCountAtom,
-  backgroundTaskHasErrorAtom,
-  type BackgroundTask,
-  type BackgroundTaskCategory,
-  type BackgroundTaskStatus,
-  type BackgroundTaskSyncState,
-} from './atoms/backgroundTasks';
