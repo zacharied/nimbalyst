@@ -97,6 +97,10 @@ export const TrackerMode: React.FC<TrackerModeProps> = ({
     setModeLayout({ activeFilters: next });
   }, [modeLayout.activeFilters, setModeLayout]);
 
+  const handleClearFilters = useCallback(() => {
+    setModeLayout({ activeFilters: [] });
+  }, [setModeLayout]);
+
   const handleViewModeChange = useCallback((mode: ViewMode) => {
     setModeLayout({ viewMode: mode });
   }, [setModeLayout]);
@@ -172,6 +176,7 @@ export const TrackerMode: React.FC<TrackerModeProps> = ({
       onSwitchToFilesMode={onSwitchToFilesMode}
       workspacePath={workspacePath || undefined}
       trackerTypes={trackerTypes}
+      onClearSidebarFilters={handleClearFilters}
     />
   );
 
