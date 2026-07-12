@@ -32,6 +32,18 @@ async function gitOutput(args: string[], cwd: string): Promise<string> {
   return stdout;
 }
 
+async function gitBytes(args: string[], cwd: string): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    execFile('git', args, { cwd, encoding: 'buffer' }, (error, stdout) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+      resolve(stdout);
+    });
+  });
+}
+
 describe('GitCommitService', () => {
   it('rejects an empty proposal without committing the current index', async () => {
     await git(['init', '-q'], tmpRoot);
@@ -58,6 +70,42 @@ describe('GitCommitService', () => {
 
     expect(result.success).toBe(true);
     expect(result.commitHash).toBeTruthy();
+  });
+
+  it('commits only the selected file while preserving unrelated staged and unstaged hunks', async () => {
+    await git(['init', '-q'], tmpRoot);
+    await git(['config', 'user.email', 'test@example.com'], tmpRoot);
+    await git(['config', 'user.name', 'Test User'], tmpRoot);
+
+    const unrelatedPath = path.join(tmpRoot, 'unrelated.txt');
+    const selectedPath = path.join(tmpRoot, 'selected.txt');
+    await fs.writeFile(unrelatedPath, 'first\nsecond\n', 'utf8');
+    await fs.writeFile(selectedPath, 'before\n', 'utf8');
+    await git(['add', 'unrelated.txt', 'selected.txt'], tmpRoot);
+    await git(['commit', '-q', '-m', 'baseline'], tmpRoot);
+    const baselineHead = (await gitOutput(['rev-parse', 'HEAD'], tmpRoot)).trim();
+
+    await fs.writeFile(unrelatedPath, 'first staged\nsecond\n', 'utf8');
+    await git(['add', 'unrelated.txt'], tmpRoot);
+    await fs.writeFile(unrelatedPath, 'first staged\nsecond unstaged-only\n', 'utf8');
+    const cachedDiffBefore = await gitBytes(['diff', '--cached', '--binary', '--', 'unrelated.txt'], tmpRoot);
+
+    await fs.writeFile(selectedPath, 'after\n', 'utf8');
+
+    const result = await executeGitCommit(tmpRoot, 'commit selected file', ['selected.txt']);
+
+    expect(result.success).toBe(true);
+    expect(result.commitHash).toBe((await gitOutput(['rev-parse', 'HEAD'], tmpRoot)).trim());
+    expect(await gitOutput(['rev-list', '--count', `${baselineHead}..HEAD`], tmpRoot)).toBe('1\n');
+    expect(await gitOutput(['log', '-1', '--format=%s'], tmpRoot)).toBe('commit selected file\n');
+    expect(await gitOutput(['diff-tree', '--no-commit-id', '--name-only', '-r', 'HEAD'], tmpRoot)).toBe('selected.txt\n');
+    expect(await gitBytes(['diff', '--cached', '--binary', '--', 'unrelated.txt'], tmpRoot)).toEqual(cachedDiffBefore);
+
+    const cachedUnrelatedDiff = await gitOutput(['diff', '--cached', '--unified=0', '--', 'unrelated.txt'], tmpRoot);
+    const workingUnrelatedDiff = await gitOutput(['diff', '--unified=0', '--', 'unrelated.txt'], tmpRoot);
+    expect(cachedUnrelatedDiff).toContain('first staged');
+    expect(cachedUnrelatedDiff).not.toContain('unstaged-only');
+    expect(workingUnrelatedDiff).toContain('second unstaged-only');
   });
 
   it('commits an absolute path in the selected linked worktree, not its parent checkout', async () => {
