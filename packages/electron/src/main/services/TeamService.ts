@@ -92,6 +92,7 @@ import {
   initializeServerManagedOrganization,
   runSilentTeamEncryptionMigrations,
 } from './SilentTeamEncryptionMigration';
+import { createTeamAuthBootstrap } from './TeamAuthBootstrap';
 
 // ============================================================================
 // Server URL Helper
@@ -1475,7 +1476,7 @@ export async function rewrapOrgKeyForAllMembers(
  * fetch failure for one team seeds that team with an empty roster rather than
  * aborting the whole sync.
  */
-export async function syncOrgProjectionFromServer(): Promise<{
+export async function syncOrgProjectionFromServer(knownTeams?: TeamDetails[]): Promise<{
   success: boolean;
   counts?: { orgs: number; projects: number; members: number; grants: number };
   error?: string;
@@ -1497,7 +1498,7 @@ export async function syncOrgProjectionFromServer(): Promise<{
       });
     }
 
-    const teams = await listTeams();
+    const teams = knownTeams ?? await listTeams();
     for (const team of teams) {
       let members: MemberInput[] = [];
       try {
@@ -1532,6 +1533,18 @@ export async function syncOrgProjectionFromServer(): Promise<{
     return { success: false, error: err instanceof Error ? err.message : String(err) };
   }
 }
+
+const runAuthenticatedTeamBootstrap = createTeamAuthBootstrap(async () => {
+  try {
+    const teams = await listTeams();
+    await Promise.all([
+      syncOrgProjectionFromServer(teams),
+      scheduleSilentEncryptionMigrations(teams),
+    ]);
+  } catch (err) {
+    logger.main.warn('[TeamService] authenticated team bootstrap failed:', err);
+  }
+});
 
 /**
  * Resolve the viewer's per-org member id (Stytch member ids are org-scoped) by
@@ -1941,24 +1954,20 @@ export function registerTeamHandlers(): void {
 
   // Epic H1: populate the local org/project/membership projection independently
   // of a workspace team match, so `canAccess` resolves correctly even before (or
-  // without) opening a matched workspace. Runs once now (no-op until auth + db
-  // are ready) and again whenever auth becomes available (login / token refresh
-  // on launch). Idempotent + best-effort.
-  syncOrgProjectionFromServer().catch(err =>
-    logger.main.warn('[TeamService] launch org projection sync failed:', err));
+  // without) opening a matched workspace. onAuthStateChange immediately supplies
+  // the current state, so this also covers launch. Keep the whole authenticated
+  // bootstrap single-flight: team API requests can refresh a token, and that
+  // refresh emits a re-entrant authenticated state before the request completes.
   onAuthStateChange((authState) => {
     if (authState.isAuthenticated) {
-      syncOrgProjectionFromServer().catch(err =>
-        logger.main.warn('[TeamService] auth-change org projection sync failed:', err));
-      listTeams().then(scheduleSilentEncryptionMigrations).catch(err =>
-        logger.main.warn('[TeamService] auth-change encryption migration scan failed:', err));
+      void runAuthenticatedTeamBootstrap();
     }
   });
 }
 
-function scheduleSilentEncryptionMigrations(teams: TeamDetails[]): void {
-  queueMicrotask(() => {
-    void runSilentTeamEncryptionMigrations(teams, {
+async function scheduleSilentEncryptionMigrations(teams: TeamDetails[]): Promise<void> {
+  try {
+    const result = await runSilentTeamEncryptionMigrations(teams, {
       getStatus: async (orgId) => {
         const orgJwt = await getOrgScopedJwt(orgId);
         return (await fetchTeamKeyStatus(orgId, orgJwt)).mode;
@@ -1966,12 +1975,11 @@ function scheduleSilentEncryptionMigrations(teams: TeamDetails[]): void {
       migrate: async (orgId) => {
         await migrateTeamToServerManaged(orgId);
       },
-    }).then((result) => {
-      if (result.attempted > 0) {
-        logger.main.info('[TeamService] Silent encryption migration scan complete', result);
-      }
-    }).catch((error) => {
-      logger.main.warn('[TeamService] Silent encryption migration scan failed', error);
     });
-  });
+    if (result.attempted > 0) {
+      logger.main.info('[TeamService] Silent encryption migration scan complete', result);
+    }
+  } catch (error) {
+    logger.main.warn('[TeamService] Silent encryption migration scan failed', error);
+  }
 }
