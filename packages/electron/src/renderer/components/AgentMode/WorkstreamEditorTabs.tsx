@@ -13,7 +13,7 @@
 import React, { useCallback, useRef, forwardRef, useImperativeHandle, useEffect } from 'react';
 import { useAtomValue, useSetAtom } from 'jotai';
 import { store } from '@nimbalyst/runtime/store';
-import { TabsProvider, useTabs, useTabsActions } from '../../contexts/TabsContext';
+import { TabsProvider, useTabs, useTabsActions, useTabNavigationShortcuts } from '../../contexts/TabsContext';
 import { TabManager } from '../TabManager/TabManager';
 import { TabContent } from '../TabContent/TabContent';
 import { setSessionTabCountAtom } from '../../store';
@@ -69,6 +69,7 @@ const WorkstreamEditorTabsInner = forwardRef<WorkstreamEditorTabsRef, Workstream
   function WorkstreamEditorTabsInner({ workstreamId, workspacePath, basePath, isActive, onSwitchToAgentMode, onOpenSessionInChat, onTabDoubleClick }, ref) {
     const { tabs, activeTabId } = useTabs();
     const tabsActions = useTabsActions();
+    useTabNavigationShortcuts(isActive);
     const setTabCount = useSetAtom(setSessionTabCountAtom);
     const workstreamState = useAtomValue(workstreamStateAtom(workstreamId));
     const setWorkstreamResources = useSetAtom(setWorkstreamResourcesAtom);

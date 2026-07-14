@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState, useImperativeHandle, forwardRef } from 'react';
 import { useSetAtom, useAtomValue, useAtom } from 'jotai';
 import type { ConfigTheme } from '@nimbalyst/runtime';
-import { useTabsActions, type TabData } from '../../contexts/TabsContext';
+import { useTabsActions, useTabNavigationShortcuts, type TabData } from '../../contexts/TabsContext';
 import { store, editorDirtyAtom, makeEditorKey } from '@nimbalyst/runtime/store';
 import { fileDeletedAtomFamily } from '../../store/atoms/fileWatch';
 import { pushNavigationEntryAtom, isRestoringNavigationAtom, historyDialogFileAtom } from '../../store';
@@ -180,6 +180,7 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
 
   // Get tab actions from context (doesn't subscribe to state - no re-renders)
   const tabsActions = useTabsActions();
+  useTabNavigationShortcuts(isActive);
 
   // Refs for imperative DOM updates - NO re-renders for tab visibility
   const tabsContainerRef = useRef<HTMLDivElement>(null);

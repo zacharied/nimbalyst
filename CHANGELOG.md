@@ -25,6 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Codex is now enabled by default and the Claude Code CLI is now opt-in; existing choices are preserved.
 
 ### Fixed
+- Next Tab and Previous Tab now navigate the active mode, including Shared Docs, without changing hidden tabs in another mode.
 - Attachments in shared documents no longer disappear after an image is moved, deleted-and-undone, or edited by a collaborator — images now stay put for everyone.
 - Very large AI sessions now open quickly instead of appearing to hang, and no longer slow down as your history grows.
 - PR mode now explains when a merge needs the GitHub CLI `workflow` scope and offers the recovery command instead of showing `gh api -X failed`.

@@ -107,9 +107,6 @@ interface UseIPCHandlersProps {
   handleWorkspaceFileSelect: (filePath: string) => Promise<void>;
   openWelcomeTab: () => Promise<void>;
   openFeedback: () => void;
-  handleNextTab?: () => void;
-  handlePreviousTab?: () => void;
-
   // State setters
   setIsApiKeyDialogOpen: (open: boolean) => void;
   setWorkspaceMode: (mode: boolean) => void;
@@ -169,9 +166,6 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
     handleWorkspaceFileSelect,
     openWelcomeTab,
     openFeedback,
-    handleNextTab,
-    handlePreviousTab,
-
     // State setters
     setIsApiKeyDialogOpen,
     setWorkspaceMode,
@@ -216,8 +210,6 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
     handleWorkspaceFileSelect,
     openWelcomeTab,
     openFeedback,
-    handleNextTab,
-    handlePreviousTab,
     setIsApiKeyDialogOpen,
     setWorkspaceMode,
     setWorkspacePath,
@@ -245,8 +237,6 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
     handleWorkspaceFileSelect,
     openWelcomeTab,
     openFeedback,
-    handleNextTab,
-    handlePreviousTab,
     setIsApiKeyDialogOpen,
     setWorkspaceMode,
     setWorkspacePath,
@@ -484,19 +474,6 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
     }
 
     // NOTE: view-history IPC event (Cmd+Y) is handled in App.tsx which gates it by active mode
-
-    // Tab navigation handlers - delegate to App.tsx for mode-aware routing
-    if (window.electronAPI.onNextTab && handlersRef.current.handleNextTab) {
-      cleanupFns.push(window.electronAPI.onNextTab(() => {
-        handlersRef.current.handleNextTab?.();
-      }));
-    }
-
-    if (window.electronAPI.onPreviousTab && handlersRef.current.handlePreviousTab) {
-      cleanupFns.push(window.electronAPI.onPreviousTab(() => {
-        handlersRef.current.handlePreviousTab?.();
-      }));
-    }
 
     // Approve/Reject action handlers
     if (window.electronAPI.onApproveAction) {
