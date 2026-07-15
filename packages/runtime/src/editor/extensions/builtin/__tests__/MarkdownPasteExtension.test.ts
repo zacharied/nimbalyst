@@ -1,7 +1,80 @@
+import { buildEditorFromExtensions } from '@lexical/extension';
+import { $isLinkNode } from '@lexical/link';
+import { RichTextExtension } from '@lexical/rich-text';
+import {
+  $createParagraphNode,
+  $getRoot,
+  PASTE_COMMAND,
+  type LexicalEditor,
+} from 'lexical';
 import { describe, expect, it, vi } from 'vitest';
 
 import { rewriteClipboardHtmlImages } from '../MarkdownPasteExtension';
 import type { UploadedEditorAsset } from '../../../EditorConfig';
+import { buildNimbalystRootExtension } from '../../NimbalystEditorExtensions';
+import { createTransformers } from '../../../markdown';
+
+function createCollabEditor(): LexicalEditor & { dispose(): void } {
+  return buildEditorFromExtensions(
+    buildNimbalystRootExtension({
+      collaboration: true,
+      extensionDependencies: [RichTextExtension],
+      markdownTransformers: createTransformers(),
+      $initialEditorState: () => {
+        const paragraph = $createParagraphNode();
+        $getRoot().append(paragraph);
+        paragraph.select();
+      },
+    }),
+  );
+}
+
+function pastePlainText(editor: LexicalEditor, text: string): ClipboardEvent {
+  if (typeof DragEvent === 'undefined') {
+    Object.defineProperty(globalThis, 'DragEvent', {
+      configurable: true,
+      value: class DragEvent extends Event {},
+    });
+  }
+  if (typeof ClipboardEvent === 'undefined') {
+    Object.defineProperty(globalThis, 'ClipboardEvent', {
+      configurable: true,
+      value: class ClipboardEvent extends Event {},
+    });
+  }
+  const event = new ClipboardEvent('paste', {
+    bubbles: true,
+    cancelable: true,
+  });
+  Object.defineProperty(event, 'clipboardData', {
+    value: {
+      files: [],
+      getData: (type: string) => (type === 'text/plain' ? text : ''),
+      types: ['text/plain'],
+    },
+  });
+
+  editor.dispatchCommand(PASTE_COMMAND, event);
+  editor.update(() => {}, { discrete: true });
+  return event;
+}
+
+function readClickableLinks(editor: LexicalEditor): Array<{ text: string; url: string }> {
+  return editor.getEditorState().read(() =>
+    $getRoot()
+      .getAllTextNodes()
+      .flatMap((textNode) => {
+        const parent = textNode.getParent();
+        return $isLinkNode(parent)
+          ? [{ text: parent.getTextContent(), url: parent.getURL() }]
+          : [];
+      }),
+  );
+}
+
+function readTextContent(editor: LexicalEditor): string {
+  return editor.getEditorState().read(() => $getRoot().getTextContent());
+}
 
 function imageFile(name = 'shot.png'): File {
   return new File([new Uint8Array([1, 2, 3, 4])], name, { type: 'image/png' });
@@ -47,5 +120,50 @@ describe('rewriteClipboardHtmlImages', () => {
 
     expect(result).toBeNull();
     expect(upload).not.toHaveBeenCalled();
+  });
+});
+
+describe('MarkdownPasteExtension link paste', () => {
+  it('pastes an inline markdown link as a clickable LinkNode', () => {
+    const editor = createCollabEditor();
+    try {
+      const event = pastePlainText(editor, '[label](https://example.com)');
+
+      expect(event.defaultPrevented).toBe(true);
+      expect(readClickableLinks(editor)).toEqual([
+        { text: 'label', url: 'https://example.com' },
+      ]);
+    } finally {
+      editor.dispose();
+    }
+  });
+
+  it('pastes a bare URL as a clickable LinkNode', () => {
+    const editor = createCollabEditor();
+    try {
+      const event = pastePlainText(editor, 'https://example.com/docs');
+
+      expect(event.defaultPrevented).toBe(true);
+      expect(readClickableLinks(editor)).toEqual([
+        {
+          text: 'https://example.com/docs',
+          url: 'https://example.com/docs',
+        },
+      ]);
+    } finally {
+      editor.dispose();
+    }
+  });
+
+  it('does not treat bracketed prose as a markdown link', () => {
+    const editor = createCollabEditor();
+    try {
+      pastePlainText(editor, 'Notes [draft] (not a link)');
+
+      expect(readClickableLinks(editor)).toEqual([]);
+      expect(readTextContent(editor)).toBe('Notes [draft] (not a link)');
+    } finally {
+      editor.dispose();
+    }
   });
 });

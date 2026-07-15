@@ -23,6 +23,7 @@ import type { Transformer } from '@lexical/markdown';
 
 import type { UploadedEditorAsset } from '../../EditorConfig';
 import { markdownToJSONSync } from '../../markdown';
+import { LINK } from '../../markdown/MarkdownTransformers';
 import { INSERT_IMAGE_COMMAND, type InsertImagePayload } from '../../plugins/ImagesPlugin';
 import { isLikelyMarkdown } from '../../utils/markdownDetection';
 import { dataUrlToImageFile, uploadEditorImageAsset } from './imageAssetUpload';
@@ -216,9 +217,15 @@ export const MarkdownPasteExtension = defineExtension({
           return false;
         }
 
-        const isMarkdown = isLikelyMarkdown(plainText, {
-          minConfidenceScore: config.minConfidenceScore,
-        });
+        // A single inline markdown link is intentionally below the general
+        // markdown-confidence threshold, but its syntax is unambiguous and the
+        // LINK transformer must run before RichText's plain-text paste path can
+        // split it into literal brackets plus an auto-linked URL.
+        const isMarkdown =
+          LINK.importRegExp?.test(plainText) === true ||
+          isLikelyMarkdown(plainText, {
+            minConfidenceScore: config.minConfidenceScore,
+          });
         if (!isMarkdown) {
           return false;
         }
