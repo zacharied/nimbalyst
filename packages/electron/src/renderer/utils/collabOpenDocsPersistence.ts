@@ -18,6 +18,8 @@
 export interface PersistedCollabEntry {
   documentId: string;
   documentType: string;
+  /** Last-known server-backed logical path. Warm fallback until index sync. */
+  displayPath?: string;
 }
 
 interface WorkspaceState {
@@ -82,12 +84,19 @@ export function readEntriesFromState(
   if (!state) return [];
 
   if (Array.isArray(state.openCollabDocumentEntries)) {
-    return state.openCollabDocumentEntries.filter(
-      (e): e is PersistedCollabEntry =>
+    return state.openCollabDocumentEntries
+      .filter((e): e is PersistedCollabEntry =>
         !!e &&
         typeof e.documentId === 'string' &&
         typeof e.documentType === 'string',
-    );
+      )
+      .map((entry) => ({
+        documentId: entry.documentId,
+        documentType: entry.documentType,
+        ...(typeof entry.displayPath === 'string' && entry.displayPath.trim()
+          ? { displayPath: entry.displayPath }
+          : {}),
+      }));
   }
 
   if (Array.isArray(state.openCollabDocumentIds)) {

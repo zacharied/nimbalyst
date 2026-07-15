@@ -4,9 +4,12 @@ vi.mock('../logger', () => ({
 }));
 import { buildCollabUri } from '../collabUri';
 import {
+  getCollabConfig,
+  openCollabDocument,
   registerCollabConfig,
   removeCollabConfig,
   resolveCollabConfigForUri,
+  updateCollabConfigDisplayMetadata,
 } from '../collabDocumentOpener';
 
 const workspacePath = '/workspace';
@@ -19,6 +22,62 @@ afterEach(() => {
 });
 
 describe('collab document key rotation resolution', () => {
+  it('passes a title-safe leaf name into tab creation', () => {
+    const addTab = vi.fn(() => 'tab-1');
+
+    openCollabDocument({
+      workspacePath,
+      orgId: 'org-a',
+      documentId: '1af74157-fe92-481b-9be3-4ed7cc6f5625',
+      title: 'Specs/Auth/Architecture Plan',
+      documentType: 'markdown',
+      keyCustody: 'server-managed',
+      serverUrl: 'ws://sync',
+      accountId: 'account-a',
+      userId: 'user-a',
+      getJwt: async () => 'token',
+      addTab,
+    });
+
+    expect(addTab).toHaveBeenCalledWith(
+      expect.stringContaining(':doc:1af74157-fe92-481b-9be3-4ed7cc6f5625'),
+      '',
+      true,
+      'Architecture Plan',
+    );
+  });
+
+  it('keeps late display metadata in the registered config for index gaps', () => {
+    const addTab = vi.fn(() => 'tab-1');
+    const displayDocumentId = 'doc-display';
+    const displayUri = buildCollabUri('org-a', displayDocumentId);
+
+    openCollabDocument({
+      workspacePath,
+      orgId: 'org-a',
+      documentId: displayDocumentId,
+      title: '',
+      documentType: 'markdown',
+      keyCustody: 'server-managed',
+      serverUrl: 'ws://sync',
+      accountId: 'account-a',
+      userId: 'user-a',
+      getJwt: async () => 'token',
+      addTab,
+    });
+
+    updateCollabConfigDisplayMetadata(displayUri, {
+      title: 'Architecture Plan',
+      displayPath: 'Specs/Auth/Architecture Plan',
+    });
+
+    expect(getCollabConfig(displayUri)).toMatchObject({
+      title: 'Architecture Plan',
+      displayPath: 'Specs/Auth/Architecture Plan',
+    });
+    removeCollabConfig(displayUri);
+  });
+
   it('bypasses cached aliases and decrypts with the freshly fetched key', async () => {
     const oldKeyBytes = new Uint8Array(32).fill(1);
     const newKeyBytes = new Uint8Array(32).fill(2);

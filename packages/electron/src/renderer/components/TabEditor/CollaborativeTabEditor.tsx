@@ -34,7 +34,11 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useAtomValue, useSetAtom } from 'jotai';
 import { MarkdownEditor, DocumentPathProvider } from '@nimbalyst/runtime';
 import { $convertFromEnhancedMarkdownString, getEditorTransformers, type CommentsConfig } from '@nimbalyst/runtime/editor';
-import { getTeamSyncProvider, sharedDocumentsAtom } from '../../store/atoms/collabDocuments';
+import {
+  getTeamSyncProvider,
+  sharedDocumentsAtom,
+  sharedFoldersAtom,
+} from '../../store/atoms/collabDocuments';
 import { buildCollabUri } from '../../utils/collabUri';
 import { FixedTabHeaderContainer, FixedTabHeaderRegistry } from '@nimbalyst/runtime/plugins/shared/fixedTabHeader';
 import { LexicalDiffHeaderAdapter } from '../UnifiedDiffHeader';
@@ -87,8 +91,15 @@ import { markDocViewed } from '../../hooks/useDocUnread';
 import { recordDocOpened } from '../../store/atoms/collabDiscovery';
 import { exportCollabRecoveryPlaintext, getCollabContentAdapter } from '@nimbalyst/collab-adapters';
 import { errorNotificationService } from '../../services/ErrorNotificationService';
-import { FilePathBreadcrumb } from '../common/FilePathBreadcrumb';
 import { UnifiedEditorHeaderBar } from './UnifiedEditorHeaderBar';
+import {
+  CollabDocumentHeaderMeta,
+  CollabRecoveryBanner,
+} from './CollabDocumentHeaderMeta';
+import {
+  getSharedDocumentDisplayPath,
+  getSharedDocumentDisplayPathWithFallback,
+} from '../CollabMode/collabTree';
 import {
   createCollaborationContext,
   createCollabExtensionHost,
@@ -137,115 +148,6 @@ async function sha256Hex(bytes: Uint8Array): Promise<string> {
     .map((b) => b.toString(16).padStart(2, '0'))
     .join('');
 }
-
-// ---------------------------------------------------------------------------
-// Collaborative user avatars (subscribes to Jotai atom -- isolated re-renders)
-// ---------------------------------------------------------------------------
-
-const CollabAvatars: React.FC<{ filePath: string }> = ({ filePath }) => {
-  const users = useAtomValue(collabAwarenessAtom(filePath));
-  const productStatus = useAtomValue(collabProductStatusAtom(filePath));
-  if (!productStatus.showPresence || users.size === 0) return null;
-
-  return (
-    <div className="collab-presence-avatars flex items-center -space-x-1.5">
-      {[...users.entries()].map(([userId, user]) => {
-        const initials = user.name
-          .split(/\s+/)
-          .map(w => w[0])
-          .join('')
-          .toUpperCase()
-          .slice(0, 2) || '?';
-        return (
-          <div
-            key={userId}
-            className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-medium"
-            style={{
-              backgroundColor: user.color,
-              color: '#fff',
-              border: '1.5px solid var(--nim-bg-secondary)',
-            }}
-            title={user.name}
-          >
-            {initials}
-          </div>
-        );
-      })}
-    </div>
-  );
-};
-
-// ---------------------------------------------------------------------------
-// Status bar (subscribes to Jotai atom -- isolated re-renders)
-// ---------------------------------------------------------------------------
-
-const CollabStatusBar: React.FC<{
-  filePath: string;
-  fileName: string;
-  onCopyCurrentDocument: () => Promise<void>;
-  onDiscardLocalCopy: () => Promise<void>;
-}> = ({ filePath, fileName, onCopyCurrentDocument, onDiscardLocalCopy }) => {
-  const status = useAtomValue(collabProductStatusAtom(filePath));
-  const statusDot = status.severity === 'success'
-    ? 'bg-[var(--nim-success)]'
-    : status.severity === 'info'
-      ? 'bg-[var(--nim-info)]'
-      : status.severity === 'warning'
-        ? 'bg-[var(--nim-warning)]'
-        : status.severity === 'error'
-          ? 'bg-[var(--nim-error)]'
-          : 'bg-[var(--nim-text-faint)]';
-  const statusText = status.severity === 'error'
-    ? 'text-[var(--nim-error)]'
-    : status.severity === 'warning'
-      ? 'text-[var(--nim-warning)]'
-      : 'text-[var(--nim-text-muted)]';
-  const rejected = status.showRejectedActions;
-
-  return (
-    <div
-      className="collab-document-status flex min-h-8 flex-wrap items-center gap-x-2 gap-y-1 border-b border-[var(--nim-border)] bg-[var(--nim-bg-secondary)] px-3 py-1 text-xs"
-      data-testid="collab-document-status"
-      data-status-kind={status.kind}
-    >
-      <div className={`w-2 h-2 rounded-full ${statusDot}`} />
-      <span className={statusText}>{status.label}</span>
-      {status.detail && (
-        <span className="collab-document-status-detail select-text text-[var(--nim-text-faint)]">
-          {status.detail}
-        </span>
-      )}
-      {rejected && (
-        <div className="collab-rejected-outbox-actions ml-auto flex items-center gap-1.5">
-          <button
-            type="button"
-            className="collab-copy-unsent-edits rounded border border-[var(--nim-border)] px-2 py-1 text-[var(--nim-text)] hover:bg-[var(--nim-bg-hover)]"
-            data-testid="collab-copy-unsent-edits"
-            onClick={() => { void onCopyCurrentDocument(); }}
-          >
-            Copy current document
-          </button>
-          <button
-            type="button"
-            className="collab-discard-local-copy rounded border border-[var(--nim-error)] px-2 py-1 text-[var(--nim-error)] hover:bg-[var(--nim-bg-hover)]"
-            data-testid="collab-discard-local-copy"
-            onClick={() => { void onDiscardLocalCopy(); }}
-          >
-            Discard local copy
-          </button>
-        </div>
-      )}
-      <span className="mx-1">|</span>
-      {status.showPresence && (
-        <>
-          <CollabAvatars filePath={filePath} />
-          <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>group</span>
-        </>
-      )}
-      <span>{fileName}</span>
-    </div>
-  );
-};
 
 // ---------------------------------------------------------------------------
 // Hydration gate overlay (NIM-949)
@@ -314,6 +216,25 @@ export const CollaborativeTabEditor: React.FC<CollaborativeTabEditorProps> = ({
   const isActiveRef = useRef(isActive);
   const docIndexUpdatedAtRef = useRef<number | null>(null);
   const sharedDocuments = useAtomValue(sharedDocumentsAtom);
+  const sharedFolders = useAtomValue(sharedFoldersAtom);
+  const sharedDisplayPath = useMemo(() => {
+    const fallbackPath = getSharedDocumentDisplayPath({
+      documentId: activeConfig.documentId,
+      title: activeConfig.displayPath || activeConfig.title || fileName,
+      parentFolderId: null,
+    }, []);
+    const currentDocument = sharedDocuments.find(
+      document => document.documentId === activeConfig.documentId,
+    );
+    if (currentDocument) {
+      return getSharedDocumentDisplayPathWithFallback(
+        currentDocument,
+        sharedFolders,
+        fallbackPath,
+      );
+    }
+    return fallbackPath;
+  }, [activeConfig.displayPath, activeConfig.documentId, activeConfig.title, fileName, sharedDocuments, sharedFolders]);
   const cursorColor = useMemo(() => randomCursorColor(), []);
   const assetService = useMemo(() => new CollabAssetService(activeConfig), [activeConfig]);
   const localOrigin = useCollabLocalOrigin(
@@ -1383,55 +1304,26 @@ export const CollaborativeTabEditor: React.FC<CollaborativeTabEditorProps> = ({
 
   return (
     <div ref={rootRef} className="collaborative-tab-editor" style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      {/* Connection status bar -- subscribes to Jotai atom, isolated re-renders */}
-      <CollabStatusBar
-        filePath={filePath}
-        fileName={fileName}
-        onCopyCurrentDocument={handleCopyCurrentDocument}
-        onDiscardLocalCopy={handleDiscardLocalCopy}
-      />
-
       <UnifiedEditorHeaderBar
         filePath={filePath}
         fileName={fileName}
         workspaceId={activeConfig.workspacePath}
         isMarkdown={documentType === 'markdown'}
         lexicalEditor={documentType === 'markdown' ? (lexicalEditor ?? undefined) : undefined}
-        breadcrumbContent={
-          localOrigin.binding?.resolvedPath ? (
-            <div className="flex min-w-0 items-center gap-1.5">
-              <span className="shrink-0 text-[var(--nim-text-faint)] text-[12px] uppercase tracking-wide">
-                Uploaded from
-              </span>
-              <FilePathBreadcrumb
-                filePath={localOrigin.binding.resolvedPath}
-                workspacePath={activeConfig.workspacePath}
-                className="min-w-0 flex-1"
-              />
-            </div>
-          ) : localOrigin.binding ? (
-            <div className="flex min-w-0 items-center gap-1.5 text-[13px]">
-              <span className="shrink-0 text-[var(--nim-text-faint)] text-[12px] uppercase tracking-wide">
-                Uploaded from
-              </span>
-              <span className="truncate text-[var(--nim-warning)]">
-                {localOrigin.binding.relativePath} (missing)
-              </span>
-            </div>
-          ) : (
-            <div className="flex min-w-0 items-center gap-1.5 text-[13px]">
-              <span className="shrink-0 text-[var(--nim-text-faint)] text-[12px] uppercase tracking-wide">
-                Shared doc
-              </span>
-              <span className="truncate text-[var(--nim-text)] font-medium">{fileName}</span>
-            </div>
-          )
-        }
+        breadcrumbContent={(
+          <CollabDocumentHeaderMeta filePath={filePath} displayPath={sharedDisplayPath} />
+        )}
         showShareLinkButton={false}
         showSharedDocButton={false}
         showHistoryAction={true}
         showCommonFileActions={false}
         extraActionItems={localOriginActionItems}
+      />
+
+      <CollabRecoveryBanner
+        filePath={filePath}
+        onCopyCurrentDocument={handleCopyCurrentDocument}
+        onDiscardLocalCopy={handleDiscardLocalCopy}
       />
 
       {/* Editor area */}

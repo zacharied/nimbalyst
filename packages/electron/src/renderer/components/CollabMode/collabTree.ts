@@ -142,6 +142,95 @@ export function getCollabDocumentPath(document: SharedDocument): string {
   return normalizeCollabPath(document.title || document.documentId);
 }
 
+export const UNRESOLVED_SHARED_DOCUMENT_NAME = 'Shared document';
+
+/**
+ * Resolve the user-facing path for a shared document without ever exposing its
+ * transport id. First-class folder rows are authoritative; legacy documents
+ * may still carry their path in `title`, so the title is retained when there
+ * is no first-class parent.
+ */
+export function getSharedDocumentDisplayPath(
+  document: Pick<SharedDocument, 'documentId' | 'title' | 'parentFolderId'>,
+  folders: SharedFolder[],
+): string {
+  const normalizedTitle = normalizeCollabPath(document.title);
+  const leafName = normalizedTitle && normalizedTitle !== document.documentId
+    ? getCollabNodeName(normalizedTitle)
+    : UNRESOLVED_SHARED_DOCUMENT_NAME;
+
+  if (!document.parentFolderId) {
+    return normalizedTitle && normalizedTitle !== document.documentId
+      ? normalizedTitle
+      : leafName;
+  }
+
+  const foldersById = new Map(folders.map(folder => [folder.folderId, folder]));
+  const segments: string[] = [];
+  const visited = new Set<string>();
+  let current = foldersById.get(document.parentFolderId);
+  if (!current && normalizedTitle.includes('/')) return normalizedTitle;
+  while (current && !visited.has(current.folderId)) {
+    visited.add(current.folderId);
+    if (current.name.trim()) segments.unshift(current.name.trim());
+    current = current.parentFolderId ? foldersById.get(current.parentFolderId) : undefined;
+  }
+  segments.push(leafName);
+  return normalizeCollabPath(segments.join('/')) || UNRESOLVED_SHARED_DOCUMENT_NAME;
+}
+
+export function getSharedDocumentDisplayName(
+  titleOrPath: string | null | undefined,
+  documentId: string,
+): string {
+  const normalized = normalizeCollabPath(titleOrPath);
+  if (!normalized || normalized === documentId) return UNRESOLVED_SHARED_DOCUMENT_NAME;
+  return getCollabNodeName(normalized) || UNRESOLVED_SHARED_DOCUMENT_NAME;
+}
+
+export function reconcileSharedDocumentDisplayName(
+  currentDisplayName: string | null | undefined,
+  titleOrPath: string | null | undefined,
+  documentId: string,
+): string {
+  const resolvedName = getSharedDocumentDisplayName(titleOrPath, documentId);
+  if (resolvedName !== UNRESOLVED_SHARED_DOCUMENT_NAME) return resolvedName;
+
+  const normalizedCurrent = normalizeCollabPath(currentDisplayName);
+  if (!normalizedCurrent || normalizedCurrent === documentId) {
+    return UNRESOLVED_SHARED_DOCUMENT_NAME;
+  }
+  return getCollabNodeName(normalizedCurrent) || UNRESOLVED_SHARED_DOCUMENT_NAME;
+}
+
+/**
+ * Prefer fresh index metadata once it is complete, but never let a partial
+ * sync replace a useful path restored with the tab's collaboration config.
+ */
+export function getSharedDocumentDisplayPathWithFallback(
+  document: Pick<SharedDocument, 'documentId' | 'title' | 'parentFolderId'>,
+  folders: SharedFolder[],
+  fallbackPath: string | null | undefined,
+): string {
+  const normalizedFallback = normalizeCollabPath(fallbackPath);
+  const safeFallback = normalizedFallback && normalizedFallback !== document.documentId
+    ? normalizedFallback
+    : UNRESOLVED_SHARED_DOCUMENT_NAME;
+  const normalizedTitle = normalizeCollabPath(document.title);
+
+  if (!normalizedTitle || normalizedTitle === document.documentId) return safeFallback;
+
+  const parentIsPending = Boolean(
+    document.parentFolderId
+    && !folders.some(folder => folder.folderId === document.parentFolderId),
+  );
+  if (parentIsPending && !normalizedTitle.includes('/') && safeFallback !== UNRESOLVED_SHARED_DOCUMENT_NAME) {
+    return safeFallback;
+  }
+
+  return getSharedDocumentDisplayPath(document, folders);
+}
+
 export function buildCollabTree(
   documents: SharedDocument[],
   customFolders: string[]

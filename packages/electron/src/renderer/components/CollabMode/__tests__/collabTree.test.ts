@@ -7,10 +7,13 @@ import {
   filterCollabTree,
   flattenCollabFolderOptions,
   getCollabDocumentPath,
+  getSharedDocumentDisplayPathWithFallback,
+  getSharedDocumentDisplayPath,
   getCollabNodeName,
   getCollabParentPath,
   joinCollabPath,
   normalizeCollabPath,
+  reconcileSharedDocumentDisplayName,
   renameCollabDocumentPath,
   resolveCollabCreateTargetFolderId,
 } from '../collabTree';
@@ -161,6 +164,49 @@ describe('collabTree', () => {
   it('falls back to document id when title is empty', () => {
     const document = makeDocument('doc-123', '');
     expect(getCollabDocumentPath(document)).toBe('doc-123');
+  });
+
+  it('derives a title-safe display path from first-class folders', () => {
+    const document = makeDocument('1af74157-fe92-481b', 'Architecture Plan', 1, 'f-auth');
+    const folders = [
+      makeFolder('f-specs', 'Specs'),
+      makeFolder('f-auth', 'Auth', 'f-specs'),
+    ];
+
+    expect(getSharedDocumentDisplayPath(document, folders)).toBe('Specs/Auth/Architecture Plan');
+  });
+
+  it('uses a neutral placeholder instead of a document id while the title is unresolved', () => {
+    const document = makeDocument('1af74157-fe92-481b', '');
+    expect(getSharedDocumentDisplayPath(document, [])).toBe('Shared document');
+  });
+
+  it('preserves a known tab name while a newer title is unresolved', () => {
+    expect(reconcileSharedDocumentDisplayName(
+      'Architecture Plan',
+      '',
+      '1af74157-fe92-481b',
+    )).toBe('Architecture Plan');
+    expect(reconcileSharedDocumentDisplayName(
+      '1af74157-fe92-481b',
+      '',
+      '1af74157-fe92-481b',
+    )).toBe('Shared document');
+  });
+
+  it('preserves a restored path until its first-class folder metadata resolves', () => {
+    const document = makeDocument('doc-123', 'Architecture Plan', 1, 'f-auth');
+    expect(getSharedDocumentDisplayPathWithFallback(
+      document,
+      [],
+      'Specs/Auth/Architecture Plan',
+    )).toBe('Specs/Auth/Architecture Plan');
+
+    expect(getSharedDocumentDisplayPathWithFallback(
+      document,
+      [makeFolder('f-auth', 'Auth')],
+      'Specs/Auth/Architecture Plan',
+    )).toBe('Auth/Architecture Plan');
   });
 
   it('filters documents by query while preserving matching ancestors', () => {
