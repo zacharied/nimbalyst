@@ -77,6 +77,12 @@ export interface TeamDocIndexRegisterMessage {
   encryptedTitle: string;
   titleIv: string;
   documentType: string;
+  /** Marks entries carrying explicit shared-document type metadata. */
+  metadataVersion?: 2;
+  /** Exact normalized suffix, including its leading dot. */
+  fileExtension?: string;
+  /** Stable id of the editor that owns this document type. */
+  editorId?: string;
   /**
    * Epic H3 P0: the project this document belongs to (the tracker-room routing
    * `teamProjectId`). Optional for backward compatibility — when omitted the
@@ -349,6 +355,12 @@ export interface EncryptedDocIndexEntry {
   encryptedTitle: string;
   titleIv: string;
   documentType: string;
+  /** Marks entries carrying explicit shared-document type metadata. */
+  metadataVersion?: 2;
+  /** Exact normalized suffix, including its leading dot. */
+  fileExtension?: string;
+  /** Stable id of the editor that owns this document type. */
+  editorId?: string;
   createdBy: string;
   createdAt: number;
   updatedAt: number;
