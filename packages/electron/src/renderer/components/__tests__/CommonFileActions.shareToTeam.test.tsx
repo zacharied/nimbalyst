@@ -104,6 +104,22 @@ describe('CommonFileActions Share to Team catalog eligibility', () => {
     expect(mocks.openDialog).not.toHaveBeenCalled();
   });
 
+  it('does not offer Share to Team for an already-shared collaborative document', () => {
+    mocks.resolveShareability.mockReturnValue({ state: 'ready', descriptor: spreadsheetDescriptor });
+    render(
+      <CommonFileActions
+        filePath="collab://org:team-a:doc:document-a"
+        fileName="people.csv"
+        onClose={() => {}}
+        menuItemClass="menu-item"
+        separatorClass="separator"
+        useButtons
+      />,
+    );
+
+    expect(screen.queryByRole('button', { name: 'Share to Team' })).toBeNull();
+  });
+
   it('reads text descriptors as UTF-8 strings and opaque descriptors as bytes', async () => {
     const readFileContent = vi.fn()
       .mockResolvedValueOnce({ success: true, content: 'a,b\n1,2', isBinary: false })

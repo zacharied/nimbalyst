@@ -21,6 +21,7 @@ import { getRelativePath } from '../utils/pathUtils';
 import { dialogRef, DIALOG_IDS } from '../dialogs';
 import type { ShareToTeamData } from '../dialogs';
 import { joinCollabPath, normalizeCollabPath } from './CollabMode/collabTree';
+import { isCollabUri } from '../utils/collabUri';
 import {
   getCollaborativeDocumentTypeCatalog,
   type CollaborativeDocumentTypeDescriptor,
@@ -357,7 +358,7 @@ export function CommonFileActions({
 
       {/* Team workspaces always explain catalog eligibility. Unsupported
           types stay visible but cannot open the promotion dialog. */}
-      {hasTeam && (
+      {hasTeam && !isCollabUri(filePath) && (
         <Item
           className={`${menuItemClass} ${shareability.state === 'ready' ? '' : 'opacity-55 cursor-not-allowed'}`}
           aria-disabled={shareability.state !== 'ready'}
