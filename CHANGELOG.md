@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 <!-- New features go here -->
+- Tracker items and other sessions mentioned in the chat transcript are now clickable, opening the item or session directly.
 - Cmd+O file search now finds team shared files and opens them collaboratively.
 - Shared document and folder creation now lets you choose any shared folder or Root as the destination.
 - Shared documents now have a recoverable Trash with empty-document cleanup, restore, manual purge, and automatic 30-day removal.
