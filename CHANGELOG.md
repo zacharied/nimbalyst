@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Cmd+O file search now finds team shared files and opens them collaboratively.
 - Shared document and folder creation now lets you choose any shared folder or Root as the destination.
 - Create diagrams, data models, spreadsheets, mockups, and more directly as shared documents.
+- The shared documents home is now a sortable list view -- browse by All, Favorites, Unread, Recently opened, Shared with me, or Shared by me, filter by type, people, or folder, and sort any column.
 - Shared documents now have a recoverable Trash with empty-document cleanup, restore, manual purge, and automatic 30-day removal.
 - Feature tracker items now have a "Won't Do" status for work decided against.
 - Built-in tracker types can now be customized per workspace -- add, rename, or remove statuses, tweak labels, icons, and colors, or add fields -- and reset back to their defaults at any time.
