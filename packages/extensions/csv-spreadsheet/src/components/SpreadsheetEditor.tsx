@@ -34,6 +34,7 @@ import { FormulaBar, type FormulaBarHandle } from './FormulaBar';
 import { ContextMenu, type ContextMenuItem } from './ContextMenu';
 import { ColumnFormatDialog } from './ColumnFormatDialog';
 import { SheetsTextEditor } from '../editors/SheetsTextEditor';
+import { buildSpreadsheetSelectionContextItem } from '../selectionContext';
 
 // Buffer of extra empty rows/columns to show beyond actual data
 const DISPLAY_BUFFER_ROWS = 20;
@@ -204,6 +205,8 @@ export function SpreadsheetEditor({ host }: EditorHostProps) {
   // Selection state (refs to avoid re-renders)
   const selectedCellRef = useRef<{ row: number; col: number } | null>(null);
   const selectionRangeRef = useRef<NormalizedSelectionRange | null>(null);
+  const selectionContextPublishVersionRef = useRef(0);
+  const lastPublishedSelectionContextRef = useRef<string | null>(null);
   const skipFocusHandlerRef = useRef(false); // Flag to skip focus handler during programmatic selection
 
   // Grid initialization - render grid immediately, load data imperatively after mount
@@ -693,6 +696,44 @@ export function SpreadsheetEditor({ host }: EditorHostProps) {
     return gridRowIndex + headerRowCount;
   }, [headerRowCount]);
 
+  const publishSelectionContext = useCallback(async (range: NormalizedSelectionRange | null) => {
+    const publishVersion = ++selectionContextPublishVersionRef.current;
+
+    if (!range) {
+      if (lastPublishedSelectionContextRef.current !== null) {
+        lastPublishedSelectionContextRef.current = null;
+        hostRef.current.setEditorContextItems(null);
+      }
+      return;
+    }
+
+    let rows: Record<string, unknown>[] = [];
+    const gridOps = gridOpsRef.current;
+    if (gridOps) {
+      try {
+        const { pinnedTop, source } = await gridOps.getData();
+        rows = [...pinnedTop, ...source];
+      } catch {
+        // The range label remains useful if RevoGrid is unavailable mid-unmount.
+      }
+    }
+
+    if (publishVersion !== selectionContextPublishVersionRef.current) return;
+
+    const item = buildSpreadsheetSelectionContextItem(range, rows);
+    const signature = JSON.stringify(item);
+    if (signature === lastPublishedSelectionContextRef.current) return;
+
+    lastPublishedSelectionContextRef.current = signature;
+    hostRef.current.setEditorContextItems([item]);
+  }, []);
+
+  useEffect(() => () => {
+    selectionContextPublishVersionRef.current += 1;
+    lastPublishedSelectionContextRef.current = null;
+    host.setEditorContextItems(null);
+  }, [host]);
+
   /**
    * Update selection refs and formula bar
    */
@@ -702,6 +743,7 @@ export function SpreadsheetEditor({ host }: EditorHostProps) {
   ) => {
     selectedCellRef.current = cell;
     selectionRangeRef.current = range;
+    void publishSelectionContext(range);
 
     if (cell && formulaBarRef.current) {
       // Read value from RevoGrid
@@ -714,7 +756,7 @@ export function SpreadsheetEditor({ host }: EditorHostProps) {
     } else if (formulaBarRef.current) {
       formulaBarRef.current.update('', '', false);
     }
-  }, []);
+  }, [publishSelectionContext]);
 
   // Handle after edit - just mark dirty, RevoGrid owns the data
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -722,8 +764,9 @@ export function SpreadsheetEditor({ host }: EditorHostProps) {
     (event: RevoGridCustomEvent<any>) => {
       if (!event.detail) return;
       host.setDirty(true);
+      void publishSelectionContext(selectionRangeRef.current);
     },
-    [host]
+    [host, publishSelectionContext]
   );
 
   // Handle column resize - persist the new width
@@ -812,9 +855,10 @@ export function SpreadsheetEditor({ host }: EditorHostProps) {
       const gridOps = gridOpsRef.current;
       if (cell && gridOps) {
         await gridOps.updateCell(cell.row, cell.col, value);
+        void publishSelectionContext(selectionRangeRef.current);
       }
     },
-    []
+    [publishSelectionContext]
   );
 
   // Select all cells (from 0,0 to last cell with data)
@@ -876,15 +920,8 @@ export function SpreadsheetEditor({ host }: EditorHostProps) {
         const pinnedRowCount = pinnedRows.length;
         const lastRow = Math.max(0, pinnedRowCount + lastDataRowIndex);
 
-        // Update selection refs
-        selectedCellRef.current = { row: 0, col: 0 };
-        selectionRangeRef.current = normalizeRange(0, 0, lastRow, lastColWithData);
-
-        // Update formula bar
-        if (formulaBarRef.current) {
-          const cellRef = formatSelectionRef(selectionRangeRef.current);
-          formulaBarRef.current.update(cellRef, '', false);
-        }
+        const selection = normalizeRange(0, 0, lastRow, lastColWithData);
+        void updateSelection({ row: 0, col: 0 }, selection);
 
         // Set RevoGrid visual focus
         // Note: RevoGrid can't visually select across pinned/data boundary,
@@ -909,7 +946,7 @@ export function SpreadsheetEditor({ host }: EditorHostProps) {
         }, 100);
       }
     })();
-  }, []);
+  }, [updateSelection]);
 
   // Handle keyboard shortcuts
   const handleKeyDown = useCallback(
