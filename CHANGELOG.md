@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 <!-- New features go here -->
+- Agents can send local system notifications to get your attention when you step away.
 - Start a new AI review session from any pull request with the review command prefilled.
 
 ### Changed
