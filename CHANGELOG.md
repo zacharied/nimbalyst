@@ -28,6 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The user menu again links to Application and Project settings, which the account menu redesign had dropped.
 - Spreadsheet documents (CSV, TSV, and calc sheets) can now be shared as collaborative documents instead of being reported as unsupported.
 - The New Session button in the files chat panel no longer gets cut off on a narrow panel, and you can now start a new session from the session menu too.
+- Claude Code (CLI) sessions created for a worktree now run inside that worktree, so their edits land on the worktree branch instead of the main branch.
 
 ### Removed
 <!-- Removed features go here -->
