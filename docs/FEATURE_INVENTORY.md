@@ -37,6 +37,7 @@ A concise reference of all features in the product. Keep this up to date as feat
 ## AI Sessions
 
 - Session creation, naming, archiving, deletion
+- Launch a new session from any workspace mode with the reusable composer popup (Cmd+Shift+N), including model/mode controls, mentions, slash commands, and attachments
 - Session search with full-text index (Cmd+L)
 - Session pinning
 - Session branching / forking

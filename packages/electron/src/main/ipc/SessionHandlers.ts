@@ -244,6 +244,7 @@ export async function registerSessionHandlers() {
                 provider,
                 model,
                 title: session.title || 'Untitled',
+                mode: session.mode || 'agent',
                 workspaceId: workspaceId,
                 providerConfig: session.providerConfig,
                 providerSessionId: session.providerSessionId,

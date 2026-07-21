@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 <!-- New features go here -->
+- Launch a new AI session from any workspace mode with Cmd+Shift+N; the draggable composer runs it in the background without navigating away and resets for the next launch.
 - Agents can send local system notifications to get your attention when you step away.
 - Start a new AI review session from any pull request with the review command prefilled.
 
