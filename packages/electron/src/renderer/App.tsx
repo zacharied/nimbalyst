@@ -2230,7 +2230,10 @@ export default function App() {
                   />
                 </TabsProvider>
               ) : (
-                <WorkspaceWelcome workspaceName="Open a workspace to get started" />
+                <WorkspaceWelcome
+                  workspaceName="Open a workspace to get started"
+                  hasWorkspace={false}
+                />
               )}
             </div>
 

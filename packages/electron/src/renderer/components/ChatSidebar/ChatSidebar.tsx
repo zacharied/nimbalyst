@@ -23,6 +23,7 @@ import { useResizeDragShield } from '../../hooks/useResizeDragShield';
 
 export interface ChatSidebarRef {
   focusInput: () => void;
+  insertPrompt: (text: string) => void;
   loadSession: (sessionId: string) => void;
 }
 
@@ -60,6 +61,8 @@ export const ChatSidebar = forwardRef<ChatSidebarRef, ChatSidebarProps>(({
 }, ref) => {
   const transcriptRef = useRef<SessionTranscriptRef>(null);
   const panelRef = useRef<HTMLDivElement>(null);
+  const pendingFocusRef = useRef(false);
+  const pendingPromptRef = useRef<string | null>(null);
   const isInitializingRef = useRef(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -87,12 +90,43 @@ export const ChatSidebar = forwardRef<ChatSidebarRef, ChatSidebarProps>(({
   // Expose methods through ref
   useImperativeHandle(ref, () => ({
     focusInput: () => {
-      transcriptRef.current?.focusInput();
+      if (transcriptRef.current) {
+        transcriptRef.current.focusInput();
+      } else {
+        pendingFocusRef.current = true;
+      }
+    },
+    insertPrompt: (text: string) => {
+      if (transcriptRef.current) {
+        transcriptRef.current.insertPrompt(text);
+      } else {
+        pendingPromptRef.current = text;
+      }
     },
     loadSession: (id: string) => {
       setSessionId(id);
     },
   }), []);
+
+  useEffect(() => {
+    if (isCollapsed || isLoading || !sessionId) return;
+
+    const frameId = requestAnimationFrame(() => {
+      const pendingPrompt = pendingPromptRef.current;
+      if (pendingPrompt !== null) {
+        pendingPromptRef.current = null;
+        pendingFocusRef.current = false;
+        transcriptRef.current?.insertPrompt(pendingPrompt);
+        return;
+      }
+      if (pendingFocusRef.current) {
+        pendingFocusRef.current = false;
+        transcriptRef.current?.focusInput();
+      }
+    });
+
+    return () => cancelAnimationFrame(frameId);
+  }, [isCollapsed, isLoading, sessionId]);
 
   // Initialize session list on mount
   useEffect(() => {

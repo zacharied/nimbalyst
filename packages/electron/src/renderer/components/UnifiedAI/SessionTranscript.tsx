@@ -214,6 +214,7 @@ interface Todo {
 
 export interface SessionTranscriptRef {
   focusInput: () => void;
+  insertPrompt: (text: string) => void;
 }
 
 export interface SessionTranscriptProps {
@@ -1047,7 +1048,11 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
   // ============================================================
   useImperativeHandle(ref, () => ({
     focusInput: () => inputRef.current?.focus(),
-  }));
+    insertPrompt: (text: string) => {
+      setDraftInput(text);
+      inputRef.current?.focus();
+    },
+  }), [setDraftInput]);
 
   // ============================================================
   // Handlers
