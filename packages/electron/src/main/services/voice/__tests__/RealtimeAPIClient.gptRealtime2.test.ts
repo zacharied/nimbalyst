@@ -42,6 +42,7 @@ vi.mock('../../analytics/AnalyticsService', () => ({
 vi.mock('ws', () => ({ default: FakeWS }));
 
 import { RealtimeAPIClient, type RealtimeModel } from '../RealtimeAPIClient';
+import { formatVoiceCommandContext } from '../voiceCommandContext';
 
 function makeClient(model?: RealtimeModel): RealtimeAPIClient {
   return new RealtimeAPIClient(
@@ -89,6 +90,32 @@ describe('session config (gpt-realtime-2)', () => {
     expect(update.session.audio.output.voice).toBe('cedar');
     expect(client.getModel()).toBe('gpt-realtime-2');
     expect(client.supportsAsyncFunctionCalls()).toBe(true);
+  });
+
+  it('includes the current workspace command list in the voice system instructions', () => {
+    const commandContext = formatVoiceCommandContext([
+      { name: 'design' },
+      { name: 'review-contribution' },
+    ]);
+    const client = new RealtimeAPIClient(
+      'test-key',
+      'coding-session',
+      '/workspace',
+      {} as any,
+      `Session context\n\n${commandContext}`,
+      undefined,
+      undefined,
+      'cedar',
+      'gpt-realtime-2',
+    );
+    const sent = attachFakeSocket(client);
+
+    (client as any).updateSession();
+
+    const update = sent.find((e) => e.type === 'session.update');
+    expect(update.session.instructions).toContain('Available workspace slash commands');
+    expect(update.session.instructions).toContain('/design');
+    expect(update.session.instructions).toContain('/review-contribution');
   });
 
   it('does NOT re-assert voice on response.create (drift fix)', () => {

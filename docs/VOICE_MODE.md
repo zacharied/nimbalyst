@@ -296,6 +296,10 @@ Generation happens in the Voice Mode settings panel (`packages/electron/src/rend
 
 There is no main-process IPC handler for summary generation -- the agent does the work through its existing tooling. If no agent is configured (`defaultAgentModel` is empty), the button is disabled and the panel shows a link into the AI Models settings instead. The previous direct-Anthropic-API implementation was removed because it required a chat API key the user might not have, even though voice mode itself only requires an OpenAI key.
 
+## Workspace Command Context
+
+At every desktop voice-session start, `VoiceModeService` clears the shared `AgentWorkflowService` snapshot, reads the same provider-aware command catalog used by the composer, and adds a bounded list of validated slash-command names to the Realtime system instructions. This makes newly added, removed, or renamed workspace commands visible on the next voice session even when they changed inside the catalog's normal cache window; command bodies, descriptions, source paths, allowed tools, and other file-derived metadata are deliberately excluded from the voice prompt.
+
 ## Session Persistence
 
 Voice mode maintains two separate but linked sessions in the database:

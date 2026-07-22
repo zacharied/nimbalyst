@@ -25,6 +25,8 @@ import { randomUUID } from 'crypto';
 import { resolveSessionModelSelection } from '../ai/sessionModelSelection';
 import { buildVoiceTaskCompletion } from './voiceTaskCompletion';
 import { createVoiceSessionHandoff } from './voiceSessionHandoff';
+import { getAgentWorkflowService } from '../AgentWorkflowService';
+import { loadFreshVoiceCommandContext } from './voiceCommandContext';
 
 // Store active voice session info
 interface VoiceSession {
@@ -290,6 +292,7 @@ export function initVoiceModeService() {
       // Load session to get context by calling the renderer to fetch it
       let sessionContext = 'New session with no prior messages.';
       let hasExistingSession = false; // For analytics
+      let linkedSessionProvider = 'claude-code';
       try {
         // Request session data from the renderer
         const session = await window.webContents.executeJavaScript(`
@@ -297,6 +300,9 @@ export function initVoiceModeService() {
         `);
 
         if (session) {
+          if (typeof session.provider === 'string' && session.provider.trim()) {
+            linkedSessionProvider = session.provider;
+          }
           // session.messages is TranscriptViewMessage[] from the canonical
           // ai_transcript_events table -- discriminated by `type`, not `role`.
           const allEvents = (session.messages || []) as Array<any>;
@@ -420,6 +426,30 @@ export function initVoiceModeService() {
           }
         } catch (error) {
           // Ignore - summary file is optional
+        }
+      }
+
+      // Enumerate the same provider-aware command catalog used by the composer.
+      // Force a fresh registry snapshot for every voice-session start so command
+      // changes inside the normal catalog TTL are reflected immediately. The
+      // formatter admits command names only; it never forwards command bodies,
+      // descriptions, source paths, or tool metadata into the voice prompt.
+      if (workspacePath) {
+        try {
+          const workflowRequest = JSON.stringify({
+            workspacePath,
+            sessionId,
+            provider: linkedSessionProvider,
+          });
+          const commandContext = await loadFreshVoiceCommandContext(
+            () => getAgentWorkflowService(workspacePath).clearCache(),
+            () => window.webContents.executeJavaScript(`
+              window.electronAPI.invoke('ai:getAgentWorkflows', ${workflowRequest})
+            `),
+          );
+          sessionContext += `\n\n${commandContext}`;
+        } catch (error) {
+          console.error('[VoiceModeService] Failed to load workspace commands for voice context:', error);
         }
       }
 
