@@ -1070,13 +1070,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
         documentType,
         content,
       }) as Promise<{ success: boolean; error?: string }>,
-    // Forward a serializable collab adapter descriptor so the main process can
-    // rebuild the adapter (dynamic main-process adapters for any extension).
-    registerCollabAdapterDescriptor: (descriptor: unknown) =>
-      ipcRenderer.invoke('collab-adapter:register-descriptor', descriptor) as Promise<{
-        success: boolean;
-        error?: string;
-      }>,
     getLocalOrigin: (workspacePath: string, documentId: string) =>
       ipcRenderer.invoke('document-sync:get-local-origin', {
         workspacePath,
