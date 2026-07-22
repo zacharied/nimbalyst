@@ -24,6 +24,7 @@ import { getDefaultAIModel, getPreferredAgentLanguage } from '../../utils/store'
 import { randomUUID } from 'crypto';
 import { resolveSessionModelSelection } from '../ai/sessionModelSelection';
 import { buildVoiceTaskCompletion } from './voiceTaskCompletion';
+import { createVoiceSessionHandoff } from './voiceSessionHandoff';
 
 // Store active voice session info
 interface VoiceSession {
@@ -554,6 +555,7 @@ export function initVoiceModeService() {
 
       // Helper: get the current linked session ID (may change if user switches sessions)
       const currentSessionId = () => activeVoiceSession?.sessionId ?? sessionId;
+      const sessionHandoff = createVoiceSessionHandoff();
 
       // Set up callbacks to forward audio/text to renderer
       // Use currentSessionId() so events always target the current session
@@ -598,9 +600,10 @@ export function initVoiceModeService() {
 
       poc.setOnSubmitPrompt(async (prompt) => {
         if (window && !window.isDestroyed()) {
+          const targetSessionId = sessionHandoff.takePromptTarget(currentSessionId());
           // Include coding agent prompt settings so they can be passed to the provider
           window.webContents.send('voice-mode:submit-prompt', {
-            sessionId: currentSessionId(),
+            sessionId: targetSessionId,
             workspacePath,
             prompt,
             codingAgentPrompt: codingAgentPromptSettings,
@@ -728,7 +731,7 @@ export function initVoiceModeService() {
       });
 
       // Create a new coding session and switch to it
-      poc.setOnCreateSession(async (title?: string) => {
+      poc.setOnCreateSession((title?: string) => sessionHandoff.createSessionOnce(async () => {
         try {
           const wp = activeVoiceSession?.workspacePath ?? workspacePath;
           if (!wp) {
@@ -750,10 +753,8 @@ export function initVoiceModeService() {
             workspaceId: wp,
           });
 
-          // Refresh the renderer's session registry so the new session appears
-          // in the sidebar, then navigate to it. The active-session change will
-          // be picked up by voiceModeListeners.syncLinkedSession, which updates
-          // the linked session ID for subsequent voice commands automatically.
+          // Navigation is only visual; sessionHandoff pins the next coding
+          // prompt to this ID even if renderer selection lags or changes.
           if (window && !window.isDestroyed()) {
             window.show();
             window.focus();
@@ -772,7 +773,7 @@ export function initVoiceModeService() {
           console.error('[VoiceModeService] Failed to create session:', error);
           return { success: false, error: error instanceof Error ? error.message : String(error) };
         }
-      });
+      }));
 
       // Propose a commit via the "Commit with AI" path. The voice agent
       // calls this when the user says "propose a commit". We forward to
@@ -841,7 +842,7 @@ export function initVoiceModeService() {
         // The [VOICE] prefix signals this is from the voice assistant
         // The system prompt (via isVoiceMode in documentContext) provides full context
         const questionPrompt = `[VOICE] ${question}`;
-        const targetSessionId = currentSessionId();
+        const targetSessionId = sessionHandoff.takePromptTarget(currentSessionId());
 
         console.log('[VoiceModeService] ask_coding_agent called with question:', question, 'target:', targetSessionId);
         askCodingAgentInFlight = true;
