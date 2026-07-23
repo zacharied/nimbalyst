@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Agent-mode document embeds now recover when their target file is created after the document opens.
 - Automations no longer rerun the same scheduled occurrence after restarting while a run is waiting or fails.
 - Voice Mode now explains blocked or missing microphones on Windows and links directly to microphone privacy settings.
+- The worktree name shown above the Commit panel no longer changes to the session title once the agent names the session.
 
 ### Removed
 <!-- Removed features go here -->
